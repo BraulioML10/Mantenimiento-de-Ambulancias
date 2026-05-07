@@ -19,17 +19,17 @@ export function FuelTab() {
   const [filterEstado, setFilterEstado] = useState("all")
 
   const ambulances: AmbulanceKmData[] = [
-    { id: "A-01", patente: "XXYZ-12", kilometrajeActual: 45000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-02", patente: "ABCD-34", kilometrajeActual: 185000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
-    { id: "A-03", patente: "EFGH-56", kilometrajeActual: 202000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
-    { id: "A-04", patente: "IJKL-78", kilometrajeActual: 67000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-05", patente: "MNOP-90", kilometrajeActual: 125000, kilometrajeUltimaMantencion: 50000, estado: "mantencion_correctiva" },
-    { id: "A-06", patente: "QRST-11", kilometrajeActual: 310000, kilometrajeUltimaMantencion: 200000, estado: "fuera_servicio" },
-    { id: "A-07", patente: "UVWX-22", kilometrajeActual: 32000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-08", patente: "YZAB-33", kilometrajeActual: 58000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-09", patente: "CDEF-44", kilometrajeActual: 192000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
-    { id: "A-10", patente: "GHIJ-55", kilometrajeActual: 41000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-11", patente: "KLMN-66", kilometrajeActual: 215000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
+    { id: "R-61", patente: "LVZP-22", kilometrajeActual: 45000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-60", patente: "LVZP-20", kilometrajeActual: 185000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
+    { id: "R-62", patente: "LVZP-23", kilometrajeActual: 202000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
+    { id: "R-63", patente: "LVZP-21", kilometrajeActual: 67000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-11", patente: "TDKZ-25", kilometrajeActual: 125000, kilometrajeUltimaMantencion: 50000, estado: "mantencion_correctiva" },
+    { id: "R-12", patente: "HZHC-30", kilometrajeActual: 310000, kilometrajeUltimaMantencion: 200000, estado: "fuera_servicio" },
+    { id: "R-13", patente: "HZHC-31", kilometrajeActual: 32000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-14", patente: "LPXW-71", kilometrajeActual: 58000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-20", patente: "HZHC-32", kilometrajeActual: 192000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
+    { id: "R-21", patente: "TDKZ-23", kilometrajeActual: 41000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-22", patente: "TDKZ-27", kilometrajeActual: 215000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
     { id: "A-12", patente: "OPQR-77", kilometrajeActual: 73000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
     { id: "A-13", patente: "STUV-88", kilometrajeActual: 28000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
     { id: "A-14", patente: "WXYZ-99", kilometrajeActual: 156000, kilometrajeUltimaMantencion: 80000, estado: "mantencion_correctiva" },
@@ -99,7 +99,7 @@ export function FuelTab() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-inter font-semibold text-gray-900">Control de Kilometraje</h1>
-          <p className="text-sm font-inter text-gray-600">Monitoreo de avance hacia mantención preventiva (cada 100.000 km)</p>
+          <p className="text-sm font-inter text-gray-600">Monitoreo de avance hacia mantención preventiva (según pauta técnica de kilometraje)</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" className="font-inter">

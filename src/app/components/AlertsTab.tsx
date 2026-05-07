@@ -16,21 +16,21 @@ interface Alert {
 
 export function AlertsTab() {
   const alerts: Alert[] = [
-    { id: "ALT-001", tipo: "preventiva_cumplida", ambulancia: "A-03", patente: "EFGH-56", descripcion: "Ambulancia superó 100.000 km desde última mantención (102.000 km recorridos)", fecha: "Hoy, 09:15", prioridad: "alta", estado: "pendiente" },
-    { id: "ALT-002", tipo: "preventiva_cumplida", ambulancia: "A-11", patente: "KLMN-66", descripcion: "Ambulancia superó 100.000 km desde última mantención (115.000 km recorridos)", fecha: "Hoy, 08:30", prioridad: "alta", estado: "en_proceso" },
+    { id: "ALT-001", tipo: "preventiva_cumplida", ambulancia: "R-62", patente: "LVZP-23", descripcion: "Ambulancia superó 100.000 km desde última mantención (102.000 km recorridos)", fecha: "Hoy, 09:15", prioridad: "alta", estado: "pendiente" },
+    { id: "ALT-002", tipo: "preventiva_cumplida", ambulancia: "R-22", patente: "TDKZ-27", descripcion: "Ambulancia superó 100.000 km desde última mantención (115.000 km recorridos)", fecha: "Hoy, 08:30", prioridad: "alta", estado: "en_proceso" },
     { id: "ALT-003", tipo: "preventiva_cumplida", ambulancia: "A-18", patente: "JJKL-33", descripcion: "Ambulancia superó 100.000 km desde última mantención (108.000 km recorridos)", fecha: "Ayer, 16:45", prioridad: "alta", estado: "pendiente" },
     { id: "ALT-004", tipo: "preventiva_cumplida", ambulancia: "A-27", patente: "EEFF-22", descripcion: "Ambulancia superó 100.000 km desde última mantención (111.000 km recorridos)", fecha: "Ayer, 14:20", prioridad: "alta", estado: "pendiente" },
 
-    { id: "ALT-005", tipo: "proxima_preventiva", ambulancia: "A-02", patente: "ABCD-34", descripcion: "Próxima a mantención preventiva (85.000 km recorridos)", fecha: "Hoy, 10:00", prioridad: "media", estado: "pendiente" },
-    { id: "ALT-006", tipo: "proxima_preventiva", ambulancia: "A-09", patente: "CDEF-44", descripcion: "Próxima a mantención preventiva (92.000 km recorridos)", fecha: "Hoy, 07:30", prioridad: "media", estado: "pendiente" },
+    { id: "ALT-005", tipo: "proxima_preventiva", ambulancia: "R-60", patente: "LVZP-20", descripcion: "Próxima a mantención preventiva (85.000 km recorridos)", fecha: "Hoy, 10:00", prioridad: "media", estado: "pendiente" },
+    { id: "ALT-006", tipo: "proxima_preventiva", ambulancia: "R-20", patente: "HZHC-32", descripcion: "Próxima a mantención preventiva (92.000 km recorridos)", fecha: "Hoy, 07:30", prioridad: "media", estado: "pendiente" },
     { id: "ALT-007", tipo: "proxima_preventiva", ambulancia: "A-16", patente: "DDEF-11", descripcion: "Próxima a mantención preventiva (88.000 km recorridos)", fecha: "Ayer, 18:00", prioridad: "media", estado: "pendiente" },
     { id: "ALT-008", tipo: "proxima_preventiva", ambulancia: "A-24", patente: "YYZZ-99", descripcion: "Próxima a mantención preventiva (94.000 km recorridos)", fecha: "Ayer, 12:15", prioridad: "media", estado: "pendiente" },
 
-    { id: "ALT-009", tipo: "correctiva_reportada", ambulancia: "A-05", patente: "MNOP-90", descripcion: "Falla reportada: Sistema de frenos requiere revisión urgente", fecha: "Hoy, 11:45", prioridad: "alta", estado: "en_proceso" },
+    { id: "ALT-009", tipo: "correctiva_reportada", ambulancia: "R-11", patente: "TDKZ-25", descripcion: "Falla reportada: Sistema de frenos requiere revisión urgente", fecha: "Hoy, 11:45", prioridad: "alta", estado: "en_proceso" },
     { id: "ALT-010", tipo: "correctiva_reportada", ambulancia: "A-14", patente: "WXYZ-99", descripcion: "Falla reportada: Ruido anormal en motor", fecha: "Hoy, 06:30", prioridad: "media", estado: "pendiente" },
     { id: "ALT-011", tipo: "correctiva_reportada", ambulancia: "A-22", patente: "UUVV-77", descripcion: "Falla reportada: Luz de advertencia de motor encendida", fecha: "Ayer, 19:20", prioridad: "alta", estado: "pendiente" },
 
-    { id: "ALT-012", tipo: "fuera_servicio", ambulancia: "A-06", patente: "QRST-11", descripcion: "Ambulancia fuera de servicio por alto kilometraje total (110.000 km desde última mantención)", fecha: "Hace 3 días", prioridad: "alta", estado: "en_proceso" }
+    { id: "ALT-012", tipo: "fuera_servicio", ambulancia: "R-12", patente: "HZHC-30", descripcion: "Ambulancia fuera de servicio por alto kilometraje total (110.000 km desde última mantención)", fecha: "Hace 3 días", prioridad: "alta", estado: "en_proceso" }
   ]
 
   const getTipoInfo = (tipo: string) => {

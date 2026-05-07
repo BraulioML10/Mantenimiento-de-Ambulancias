@@ -19,17 +19,17 @@ export function FleetTab() {
   const [searchTerm, setSearchTerm] = useState("")
 
   const ambulances: Ambulance[] = [
-    { id: "A-01", patente: "XXYZ-12", modelo: "Mercedes-Benz Sprinter 2020", kilometrajeActual: 45000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-02", patente: "ABCD-34", modelo: "Ford Transit 2019", kilometrajeActual: 185000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
-    { id: "A-03", patente: "EFGH-56", modelo: "Mercedes-Benz Sprinter 2018", kilometrajeActual: 202000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
-    { id: "A-04", patente: "IJKL-78", modelo: "Renault Master 2021", kilometrajeActual: 67000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-05", patente: "MNOP-90", modelo: "Fiat Ducato 2019", kilometrajeActual: 125000, kilometrajeUltimaMantencion: 50000, estado: "mantencion_correctiva" },
-    { id: "A-06", patente: "QRST-11", modelo: "Mercedes-Benz Sprinter 2017", kilometrajeActual: 310000, kilometrajeUltimaMantencion: 200000, estado: "fuera_servicio" },
-    { id: "A-07", patente: "UVWX-22", modelo: "Ford Transit 2022", kilometrajeActual: 32000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-08", patente: "YZAB-33", modelo: "Mercedes-Benz Sprinter 2021", kilometrajeActual: 58000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-09", patente: "CDEF-44", modelo: "Renault Master 2019", kilometrajeActual: 192000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
-    { id: "A-10", patente: "GHIJ-55", modelo: "Fiat Ducato 2020", kilometrajeActual: 41000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
-    { id: "A-11", patente: "KLMN-66", modelo: "Mercedes-Benz Sprinter 2018", kilometrajeActual: 215000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
+    { id: "R-61", patente: "LVZP-22", modelo: "Mercedes-Benz Sprinter 2020", kilometrajeActual: 45000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-60", patente: "LVZP-20", modelo: "Ford Transit 2019", kilometrajeActual: 185000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
+    { id: "R-62", patente: "LVZP-23", modelo: "Mercedes-Benz Sprinter 2018", kilometrajeActual: 202000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
+    { id: "R-63", patente: "LVZP-21", modelo: "Renault Master 2021", kilometrajeActual: 67000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-11", patente: "TDKZ-25", modelo: "Fiat Ducato 2019", kilometrajeActual: 125000, kilometrajeUltimaMantencion: 50000, estado: "mantencion_correctiva" },
+    { id: "R-12", patente: "HZHC-30", modelo: "Mercedes-Benz Sprinter 2017", kilometrajeActual: 310000, kilometrajeUltimaMantencion: 200000, estado: "fuera_servicio" },
+    { id: "R-13", patente: "HZHC-31", modelo: "Ford Transit 2022", kilometrajeActual: 32000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-14", patente: "LPXW-71", modelo: "Mercedes-Benz Sprinter 2021", kilometrajeActual: 58000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-20", patente: "HZHC-32", modelo: "Renault Master 2019", kilometrajeActual: 192000, kilometrajeUltimaMantencion: 100000, estado: "proxima_mantencion" },
+    { id: "R-21", patente: "TDKZ-23", modelo: "Fiat Ducato 2020", kilometrajeActual: 41000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
+    { id: "R-22", patente: "TDKZ-27", modelo: "Mercedes-Benz Sprinter 2018", kilometrajeActual: 215000, kilometrajeUltimaMantencion: 100000, estado: "mantencion_preventiva" },
     { id: "A-12", patente: "OPQR-77", modelo: "Ford Transit 2020", kilometrajeActual: 73000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
     { id: "A-13", patente: "STUV-88", modelo: "Renault Master 2022", kilometrajeActual: 28000, kilometrajeUltimaMantencion: 0, estado: "operativa" },
     { id: "A-14", patente: "WXYZ-99", modelo: "Mercedes-Benz Sprinter 2019", kilometrajeActual: 156000, kilometrajeUltimaMantencion: 80000, estado: "mantencion_correctiva" },
@@ -73,8 +73,63 @@ export function FleetTab() {
     amb.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     amb.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
     amb.modelo.toLowerCase().includes(searchTerm.toLowerCase())
+    
   )
+const exportToExcel = () => {
+  const headers = [
+    "Código",
+    "Patente",
+    "Modelo",
+    "Km Actual",
+    "Km Última Mantención",
+    "Km Recorridos",
+    "Km Restantes",
+    "Estado",
+  ];
 
+  const rows = filteredAmbulances.map((ambulance) => {
+    const kmRecorridos = getKmRecorridos(
+      ambulance.kilometrajeActual,
+      ambulance.kilometrajeUltimaMantencion
+    );
+
+    const kmRestantes = getKmRestantes(
+      ambulance.kilometrajeActual,
+      ambulance.kilometrajeUltimaMantencion
+    );
+
+    return [
+      ambulance.id,
+      ambulance.patente,
+      ambulance.modelo,
+      ambulance.kilometrajeActual,
+      ambulance.kilometrajeUltimaMantencion,
+      kmRecorridos,
+      kmRestantes,
+      ambulance.estado,
+    ];
+  });
+
+  const csvContent = [headers, ...rows]
+    .map((row) =>
+      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(";")
+    )
+    .join("\n");
+
+  const blob = new Blob(["\ufeff" + csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "reporte_ambulancias_ssvq.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -87,7 +142,7 @@ export function FleetTab() {
             <Filter className="w-4 h-4 mr-2" />
             Filtros
           </Button>
-          <Button className="font-inter">
+          <Button onClick={exportToExcel} className="font-inter">
             <Download className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
@@ -192,8 +247,16 @@ export function FleetTab() {
                   </TableCell>
                   <TableCell>{getEstadoBadge(ambulance.estado)}</TableCell>
                   <TableCell className="text-center">
-                    <Button variant="outline" size="sm" className="font-inter">
-                      <Eye className="w-4 h-4 mr-1" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        alert(
+                          `Detalle de ambulancia\n\nCódigo: ${ambulance.id}\nPatente: ${ambulance.patente}\nModelo: ${ambulance.modelo}\nKm actual: ${ambulance.kilometrajeActual} km\nÚltima mantención: ${ambulance.kilometrajeUltimaMantencion} km\nEstado: ${ambulance.estado}`
+                        )
+                      }
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
                       Ver Detalle
                     </Button>
                   </TableCell>

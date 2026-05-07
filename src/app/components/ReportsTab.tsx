@@ -23,10 +23,10 @@ export function ReportsTab() {
 
   // Ambulancias con más mantenciones
   const ambulanciaData = [
-    { ambulancia: 'A-03', mantenciones: 8 },
-    { ambulancia: 'A-11', mantenciones: 7 },
+    { ambulancia: 'R-62', mantenciones: 8 },
+    { ambulancia: 'R-22', mantenciones: 7 },
     { ambulancia: 'A-18', mantenciones: 6 },
-    { ambulancia: 'A-06', mantenciones: 5 },
+    { ambulancia: 'R-12', mantenciones: 5 },
     { ambulancia: 'A-27', mantenciones: 4 },
   ]
 

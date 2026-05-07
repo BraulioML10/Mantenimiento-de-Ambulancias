@@ -58,8 +58,8 @@ export default function App() {
                 <Ambulance className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl text-gray-900 font-inter font-semibold">Dashboard de Mantención de Ambulancias</h1>
-                <p className="text-xs text-gray-500 font-inter">Sistema de Control de Kilometraje</p>
+                <h1 className="text-xl text-gray-900 font-inter font-semibold">Gestión de Mantenimiento Preventivo SAMU - SSVQ</h1>
+                <p className="text-xs text-gray-500 font-inter">Prototipo funcional con datos simulados para futura integración GPS</p>
               </div>
             </div>
             <nav className="flex items-center gap-6">
@@ -143,7 +143,7 @@ export default function App() {
               <Ambulance className="w-4 h-4 text-red-600" />
               <span>© 2026 Sistema de Mantención de Ambulancias.</span>
             </div>
-            <span>Control preventivo basado en kilometraje cada 100.000 km.</span>
+            <span>Control preventivo basado en kilometraje según pauta técnica de kilometraje.</span>
           </div>
           <div className="flex items-center gap-6">
             <span>Última actualización: {new Date().toLocaleTimeString()}</span>

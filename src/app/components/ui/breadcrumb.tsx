@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Slot } from " import { Slot } from "@radix-ui/react-slot@1.1.2";.Groups[0].Value -replace '@\d+\.\d+\.\d+', '' ";
+import { Slot } from "@radix-ui/react-slot";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
 
 import { cn } from "./utils";
