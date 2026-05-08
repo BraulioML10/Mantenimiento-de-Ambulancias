@@ -6,7 +6,9 @@ import { QRFormsTab } from "./components/QRFormsTab"
 import { RoutesTab } from "./components/RoutesTab"
 import { AlertsTab } from "./components/AlertsTab"
 import { ReportsTab } from "./components/ReportsTab"
+import { LoginPage } from "./components/LoginPage"
 import { useAmbulances, type AmbulanceStatus } from "./AmbulanceContext"
+import { useAuth } from "./AuthContext"
 import {
   Ambulance,
   Bell,
@@ -14,6 +16,7 @@ import {
   FileText,
   Gauge,
   Home,
+  LogOut,
   QrCode,
   Users,
   Wrench,
@@ -40,6 +43,8 @@ interface NotificationItem {
 }
 
 export default function App() {
+  const { currentUser, isLoading, logout } = useAuth()
+
   const [activeTab, setActiveTab] = useState<TabType>("inicio")
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -55,13 +60,24 @@ export default function App() {
     statusConfig,
   } = useAmbulances()
 
-  const currentUser = {
-    name: "Administrador SAMU",
-    email: "admin.samu@ssvq.cl",
-    role: "Administrador",
-    status: "Activo",
-    initials: "AS",
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-sm font-inter text-gray-600">Cargando sesión...</p>
+      </div>
+    )
   }
+
+  if (!currentUser) {
+    return <LoginPage />
+  }
+
+  const userInitials = currentUser.name
+    .split(" ")
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
 
   const currentAlarmNotifications = useMemo<NotificationItem[]>(() => {
     return ambulances
@@ -234,7 +250,7 @@ export default function App() {
               >
                 <div className="relative">
                   <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-sm font-inter font-bold text-red-700">
-                    {currentUser.initials}
+                    {userInitials}
                   </div>
 
                   {hasUnreadNotifications && (
@@ -274,7 +290,7 @@ export default function App() {
                   <div className="p-5 border-b border-gray-200">
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center text-xl font-inter font-bold text-red-700 shrink-0">
-                        {currentUser.initials}
+                        {userInitials}
                       </div>
 
                       <div className="min-w-0">
@@ -286,6 +302,10 @@ export default function App() {
                           {currentUser.email}
                         </p>
 
+                        <p className="text-xs font-inter text-gray-500 mt-1">
+                          Nickname: {currentUser.username}
+                        </p>
+
                         <div className="flex flex-wrap gap-2 mt-2">
                           <span className="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-inter font-medium text-blue-700">
                             Rol: {currentUser.role}
@@ -295,6 +315,15 @@ export default function App() {
                             Estado: {currentUser.status}
                           </span>
                         </div>
+
+                        <Button
+                          variant="outline"
+                          className="w-full mt-4 font-inter"
+                          onClick={logout}
+                        >
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Cerrar sesión
+                        </Button>
                       </div>
                     </div>
                   </div>
