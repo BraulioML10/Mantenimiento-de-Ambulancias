@@ -39,7 +39,7 @@ interface DbSystemUser {
   user_code: string
   name: string
   username: string
-  email: string
+  email: string | null
   role: UserRole
   status: UserStatus
   temporary_password: string
@@ -103,42 +103,26 @@ const mapFromDatabase = (user: DbSystemUser): SystemUser => ({
   userCode: user.user_code,
   name: user.name,
   username: user.username,
-  email: user.email,
+  email: user.email || "",
   role: user.role,
   status: user.status,
   temporaryPassword: user.temporary_password,
   lastAccess: user.last_access,
 })
 
-const mapToDatabase = (user: SystemUser) => ({
-  user_code: user.userCode,
-  name: user.name.trim(),
-  username: user.username.trim().toLowerCase(),
-  email: user.email.trim().toLowerCase(),
-  role: user.role,
-  status: user.status,
-  temporary_password: user.temporaryPassword.trim(),
-  last_access: user.lastAccess,
-})
+const mapToDatabase = (user: SystemUser) => {
+  const cleanEmail = user.email.trim().toLowerCase()
 
-const normalizeText = (value: string) => {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-zñ\s]/g, "")
-    .trim()
-}
-
-const buildUsernameFromName = (name: string) => {
-  const parts = normalizeText(name).split(/\s+/).filter(Boolean)
-
-  if (parts.length === 0) return ""
-
-  const firstName = parts[0]
-  const lastName = parts.length > 1 ? parts[1] : "usuario"
-
-  return `${firstName}.${lastName}`
+  return {
+    user_code: user.userCode,
+    name: user.name.trim(),
+    username: user.username.trim().toLowerCase(),
+    email: cleanEmail || null,
+    role: user.role,
+    status: user.status,
+    temporary_password: user.temporaryPassword.trim(),
+    last_access: user.lastAccess,
+  }
 }
 
 const getCurrentAccessText = () => {
@@ -195,11 +179,13 @@ export function AlertsTab() {
     const term = searchTerm.toLowerCase().trim()
 
     return users.filter((user) => {
+      const emailText = user.email || "sin correo registrado"
+
       const matchesSearch =
         !term ||
         user.name.toLowerCase().includes(term) ||
         user.username.toLowerCase().includes(term) ||
-        user.email.toLowerCase().includes(term) ||
+        emailText.toLowerCase().includes(term) ||
         user.role.toLowerCase().includes(term)
 
       const matchesRole = roleFilter === "todos" || user.role === roleFilter
@@ -269,48 +255,41 @@ export function AlertsTab() {
     if (
       !editingForm.name.trim() ||
       !editingForm.username.trim() ||
-      !editingForm.email.trim() ||
       !editingForm.temporaryPassword.trim()
     ) {
-      window.alert("Debes completar nombre, nickname, correo y contraseña.")
+      window.alert("Debes completar nombre, nickname y contraseña.")
       return
     }
 
     const updated = crearUsuarioDesdeFormulario(editingForm)
 
-    if (updated.role === "Administrador") {
-      const anotherAdminExists = users.some(
-        (user) =>
-          user.role === "Administrador" &&
-          user.id !== updated.id &&
-          user.id !== editingForm.originalId
-      )
+    const usernameExists = users.some(
+      (user) =>
+        user.username.toLowerCase() === updated.username.toLowerCase() &&
+        user.id !== updated.id &&
+        user.id !== editingForm.originalId
+    )
 
-      if (anotherAdminExists) {
-        window.alert("Solo puede existir un usuario con rol Administrador.")
-        return
-      }
+    if (usernameExists) {
+      window.alert("Ya existe un usuario con ese nickname.")
+      return
     }
 
-    if (isCreating) {
-      const usernameExists = users.some(
-        (user) => user.username.toLowerCase() === updated.username.toLowerCase()
-      )
-
-      if (usernameExists) {
-        window.alert("Ya existe un usuario con ese nickname.")
-        return
-      }
-
+    if (updated.email.trim()) {
       const emailExists = users.some(
-        (user) => user.email.toLowerCase() === updated.email.toLowerCase()
+        (user) =>
+          user.email.toLowerCase() === updated.email.toLowerCase() &&
+          user.id !== updated.id &&
+          user.id !== editingForm.originalId
       )
 
       if (emailExists) {
         window.alert("Ya existe un usuario con ese correo.")
         return
       }
+    }
 
+    if (isCreating) {
       setPendingChange({
         type: "crear",
         updated,
@@ -318,7 +297,7 @@ export function AlertsTab() {
           `Código: ${updated.userCode}`,
           `Nombre: ${updated.name}`,
           `Nickname: ${updated.username}`,
-          `Correo: ${updated.email}`,
+          `Correo: ${updated.email || "Sin correo registrado"}`,
           `Rol: ${updated.role}`,
           `Estado: ${updated.status}`,
           `Contraseña: ${updated.temporaryPassword}`,
@@ -342,7 +321,11 @@ export function AlertsTab() {
 
     addChange("Nombre", original.name, updated.name)
     addChange("Nickname", original.username, updated.username)
-    addChange("Correo", original.email, updated.email)
+    addChange(
+      "Correo",
+      original.email || "Sin correo registrado",
+      updated.email || "Sin correo registrado"
+    )
     addChange("Rol", original.role, updated.role)
     addChange("Estado", original.status, updated.status)
     addChange("Contraseña", original.temporaryPassword, updated.temporaryPassword)
@@ -368,18 +351,13 @@ export function AlertsTab() {
       return
     }
 
-    if (user.role === "Administrador") {
-      window.alert("No se puede eliminar el único usuario Administrador desde esta vista.")
-      return
-    }
-
     setPendingChange({
       type: "eliminar",
       original: user,
       changes: [
         `Usuario: ${user.name}`,
         `Nickname: ${user.username}`,
-        `Correo: ${user.email}`,
+        `Correo: ${user.email || "Sin correo registrado"}`,
         `Rol: ${user.role}`,
         `Estado actual: ${user.status}`,
       ],
@@ -424,7 +402,10 @@ export function AlertsTab() {
       }
 
       const savedUser = mapFromDatabase(data)
-      setUsers((prev) => [...prev, savedUser].sort((a, b) => a.userCode.localeCompare(b.userCode)))
+
+      setUsers((prev) =>
+        [...prev, savedUser].sort((a, b) => a.userCode.localeCompare(b.userCode))
+      )
     }
 
     if (
@@ -525,30 +506,32 @@ export function AlertsTab() {
   const handleNameChange = (value: string) => {
     if (!editingForm) return
 
-    const username = buildUsernameFromName(value)
-    const shouldAutofill = isCreating || !editingForm.username.trim()
-
     setEditingForm({
       ...editingForm,
       name: value,
-      username: shouldAutofill ? username : editingForm.username,
-      email: shouldAutofill && username ? `${username}@ssvq.cl` : editingForm.email,
-      temporaryPassword:
-        shouldAutofill && username
-          ? buildPasswordFromUsername(username)
-          : editingForm.temporaryPassword,
     })
   }
 
   const handleUsernameChange = (value: string) => {
     if (!editingForm) return
 
-    const username = value.trim().toLowerCase()
+    setEditingForm({
+      ...editingForm,
+      username: value.trim().toLowerCase(),
+    })
+  }
+
+  const generarContrasenaDesdeNickname = () => {
+    if (!editingForm) return
+
+    if (!editingForm.username.trim()) {
+      window.alert("Primero debes ingresar un nickname para generar la contraseña.")
+      return
+    }
 
     setEditingForm({
       ...editingForm,
-      username,
-      temporaryPassword: buildPasswordFromUsername(username),
+      temporaryPassword: buildPasswordFromUsername(editingForm.username),
     })
   }
 
@@ -721,7 +704,14 @@ export function AlertsTab() {
                     </td>
 
                     <td className="px-4 py-3 text-gray-700">{user.username}</td>
-                    <td className="px-4 py-3 text-gray-700">{user.email}</td>
+
+                    <td className="px-4 py-3 text-gray-700">
+                      {user.email || (
+                        <span className="text-gray-400 italic">
+                          Sin correo registrado
+                        </span>
+                      )}
+                    </td>
 
                     <td className="px-4 py-3">
                       <Badge className={`${roleBadgeClass[user.role]} font-inter`}>
@@ -822,7 +812,7 @@ export function AlertsTab() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Correo</label>
+                <label className="text-sm text-gray-600">Correo opcional</label>
                 <Input
                   type="email"
                   value={editingForm.email}
@@ -883,12 +873,7 @@ export function AlertsTab() {
                   <Button
                     variant="outline"
                     className="font-inter"
-                    onClick={() =>
-                      setEditingForm({
-                        ...editingForm,
-                        temporaryPassword: buildPasswordFromUsername(editingForm.username),
-                      })
-                    }
+                    onClick={generarContrasenaDesdeNickname}
                   >
                     <KeyRound className="w-4 h-4 mr-2" />
                     Generar
