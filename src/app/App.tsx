@@ -7,8 +7,9 @@ import { RoutesTab } from "./components/RoutesTab"
 import { AlertsTab } from "./components/AlertsTab"
 import { ReportsTab } from "./components/ReportsTab"
 import { LoginPage } from "./components/LoginPage"
+import { Button } from "./components/ui/button"
 import { useAmbulances, type AmbulanceStatus } from "./AmbulanceContext"
-import { useAuth } from "./AuthContext"
+import { useAuth, type LoggedUser } from "./AuthContext"
 import {
   Ambulance,
   Bell,
@@ -45,6 +46,28 @@ interface NotificationItem {
 export default function App() {
   const { currentUser, isLoading, logout } = useAuth()
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-sm font-inter text-gray-600">Cargando sesión...</p>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return <LoginPage />
+  }
+
+  return <DashboardApp currentUser={currentUser} logout={logout} />
+}
+
+function DashboardApp({
+  currentUser,
+  logout,
+}: {
+  currentUser: LoggedUser
+  logout: () => void
+}) {
   const [activeTab, setActiveTab] = useState<TabType>("inicio")
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -59,18 +82,6 @@ export default function App() {
     formatKm,
     statusConfig,
   } = useAmbulances()
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-sm font-inter text-gray-600">Cargando sesión...</p>
-      </div>
-    )
-  }
-
-  if (!currentUser) {
-    return <LoginPage />
-  }
 
   const userInitials = currentUser.name
     .split(" ")
