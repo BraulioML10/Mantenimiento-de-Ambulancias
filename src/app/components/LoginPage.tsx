@@ -8,8 +8,8 @@ import { useAuth } from "../AuthContext"
 export function LoginPage() {
   const { login } = useAuth()
 
-  const [username, setUsername] = useState("admin.samu")
-  const [password, setPassword] = useState("admin.samu123")
+  const [username, setUsername] = useState("admin.general")
+  const [password, setPassword] = useState("admin.general123")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -42,20 +42,27 @@ export function LoginPage() {
               </h1>
 
               <p className="text-sm font-inter text-red-50 mt-4 leading-6">
-                Acceso al prototipo funcional para administración de ambulancias,
-                kilometraje preventivo, mantenciones, usuarios y registros QR.
+                Acceso al sistema de administración de ambulancias, control de kilometraje,
+                mantenciones, usuarios y registros operativos.
               </p>
             </div>
 
             <div className="mt-8 rounded-2xl bg-white/10 border border-white/20 p-4">
               <p className="text-sm font-inter font-semibold mb-2">
-                Credenciales de prueba
+                Usuarios habilitados
               </p>
 
-              <div className="space-y-2 text-sm font-inter text-red-50">
-                <p>Administrador: admin.samu / admin.samu123</p>
-                <p>Coordinador: coordinacion.flota / coordinacion.flota123</p>
-                <p>Chofer: chofer.quillota / chofer.quillota123</p>
+              <div className="space-y-2 text-sm font-inter text-red-50 max-h-48 overflow-y-auto pr-2">
+                <p>Administrador: admin.general / admin.general123</p>
+                <p>Coordinador: camila.torres / camila.torres123</p>
+                <p>Coordinador: felipe.morales / felipe.morales123</p>
+                <p>Coordinador: daniela.fuentes / daniela.fuentes123</p>
+                <p>Chofer: rodrigo.paredes / rodrigo.paredes123</p>
+                <p>Chofer: marcela.rivas / marcela.rivas123</p>
+                <p>Chofer: ignacio.salinas / ignacio.salinas123</p>
+                <p>Chofer: valentina.herrera / valentina.herrera123</p>
+                <p>Chofer: cristian.vega / cristian.vega123</p>
+                <p>Chofer: paula.contreras / paula.contreras123</p>
               </div>
             </div>
           </div>
@@ -66,7 +73,7 @@ export function LoginPage() {
                 Iniciar sesión
               </h2>
               <p className="text-sm font-inter text-gray-600 mt-1">
-                Ingresa con tu nickname y contraseña temporal.
+                Ingresa con tu nickname y contraseña.
               </p>
             </div>
 
@@ -118,8 +125,7 @@ export function LoginPage() {
 
             <div className="mt-6 rounded-xl bg-blue-50 border border-blue-200 p-4">
               <p className="text-sm font-inter text-blue-800">
-                Este login es simulado para el prototipo. Valida los usuarios registrados
-                en Supabase y permite identificar quién ingresó al sistema.
+                El acceso permite identificar el perfil activo y organizar las funciones del sistema según el rol asignado.
               </p>
             </div>
           </div>

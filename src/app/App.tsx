@@ -255,7 +255,7 @@ function DashboardApp({
                   Gestión de Mantenimiento Preventivo SAMU - SSVQ
                 </h1>
                 <p className="text-sm font-inter text-gray-600">
-                  Prototipo funcional con datos simulados para control de kilometraje, mantenciones, usuarios y registros QR.
+                  Sistema de gestión para control de kilometraje, mantenciones, usuarios y registros QR.
                 </p>
               </div>
             </div>
@@ -448,7 +448,7 @@ function DashboardApp({
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs font-inter text-gray-500">
           <p>© 2026 Sistema de Gestión de Mantenimiento Preventivo SAMU - SSVQ.</p>
           <p>
-            Datos simulados para prototipo académico. Última actualización:{" "}
+            Sistema de gestión de mantenimiento preventivo SAMU - SSVQ. Última actualización:{" "}
             {new Date().toLocaleTimeString("es-CL")}
           </p>
         </div>
