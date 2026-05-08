@@ -33,13 +33,19 @@ type TabType =
   | "reportes"
   | "qr"
 
+type NotificationStatus =
+  | "proxima_mantencion"
+  | "mantencion_preventiva"
+  | "mantencion_correctiva"
+  | "fuera_servicio"
+
 interface NotificationItem {
   id: string
   title: string
   description: string
   time: string
   priority: "alta" | "media"
-  status: AmbulanceStatus
+  status: NotificationStatus
   read: boolean
 }
 
