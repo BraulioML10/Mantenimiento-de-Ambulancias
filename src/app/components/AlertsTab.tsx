@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "./ui/card"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
@@ -16,13 +16,17 @@ import {
   UserCog,
   X,
 } from "lucide-react"
+import { supabase } from "../../lib/supabaseClient"
+import { useAuth } from "../AuthContext"
 
-type UserRole = "Administrador" | "Coordinador" | "Conductor"
+type UserRole = "Administrador" | "Coordinador" | "Chofer"
 type UserStatus = "Activo" | "Inactivo"
 
 interface SystemUser {
   id: string
+  userCode: string
   name: string
+  username: string
   email: string
   role: UserRole
   status: UserStatus
@@ -30,9 +34,23 @@ interface SystemUser {
   lastAccess: string
 }
 
+interface DbSystemUser {
+  id: string
+  user_code: string
+  name: string
+  username: string
+  email: string
+  role: UserRole
+  status: UserStatus
+  temporary_password: string
+  last_access: string
+}
+
 interface UserForm {
   originalId: string
+  userCode: string
   name: string
+  username: string
   email: string
   role: UserRole
   status: UserStatus
@@ -46,59 +64,13 @@ interface PendingUserChange {
   changes: string[]
 }
 
-const initialUsers: SystemUser[] = [
-  {
-    id: "USR-001",
-    name: "Administrador SAMU",
-    email: "admin.samu@ssvq.cl",
-    role: "Administrador",
-    status: "Activo",
-    temporaryPassword: "SAMU-ADMIN-01",
-    lastAccess: "Hoy 15:32",
-  },
-  {
-    id: "USR-002",
-    name: "Coordinación de Flota",
-    email: "coordinacion.flota@ssvq.cl",
-    role: "Coordinador",
-    status: "Activo",
-    temporaryPassword: "TEMP-2026-01",
-    lastAccess: "Hoy 14:50",
-  },
-  {
-    id: "USR-003",
-    name: "Coordinación de Mantenciones",
-    email: "mantenciones.samu@ssvq.cl",
-    role: "Coordinador",
-    status: "Activo",
-    temporaryPassword: "TEMP-2026-02",
-    lastAccess: "Ayer 18:10",
-  },
-  {
-    id: "USR-004",
-    name: "Conductor Base Quillota",
-    email: "conductor.quillota@ssvq.cl",
-    role: "Conductor",
-    status: "Activo",
-    temporaryPassword: "TEMP-2026-03",
-    lastAccess: "Hoy 08:15",
-  },
-  {
-    id: "USR-005",
-    name: "Conductor Base Viña del Mar",
-    email: "conductor.vina@ssvq.cl",
-    role: "Conductor",
-    status: "Inactivo",
-    temporaryPassword: "TEMP-2026-04",
-    lastAccess: "Sin ingreso reciente",
-  },
-]
-
 const emptyUserForm: UserForm = {
   originalId: "",
+  userCode: "",
   name: "",
+  username: "",
   email: "",
-  role: "Conductor",
+  role: "Chofer",
   status: "Activo",
   temporaryPassword: "",
 }
@@ -106,7 +78,7 @@ const emptyUserForm: UserForm = {
 const roleBadgeClass: Record<UserRole, string> = {
   Administrador: "bg-red-100 text-red-700 border-red-200",
   Coordinador: "bg-blue-100 text-blue-700 border-blue-200",
-  Conductor: "bg-green-100 text-green-700 border-green-200",
+  Chofer: "bg-green-100 text-green-700 border-green-200",
 }
 
 const statusBadgeClass: Record<UserStatus, string> = {
@@ -114,8 +86,74 @@ const statusBadgeClass: Record<UserStatus, string> = {
   Inactivo: "bg-gray-100 text-gray-700 border-gray-200",
 }
 
+const userSelect = `
+  id,
+  user_code,
+  name,
+  username,
+  email,
+  role,
+  status,
+  temporary_password,
+  last_access
+`
+
+const mapFromDatabase = (user: DbSystemUser): SystemUser => ({
+  id: user.id,
+  userCode: user.user_code,
+  name: user.name,
+  username: user.username,
+  email: user.email,
+  role: user.role,
+  status: user.status,
+  temporaryPassword: user.temporary_password,
+  lastAccess: user.last_access,
+})
+
+const mapToDatabase = (user: SystemUser) => ({
+  user_code: user.userCode,
+  name: user.name.trim(),
+  username: user.username.trim().toLowerCase(),
+  email: user.email.trim().toLowerCase(),
+  role: user.role,
+  status: user.status,
+  temporary_password: user.temporaryPassword.trim(),
+  last_access: user.lastAccess,
+})
+
+const normalizeText = (value: string) => {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-zñ\s]/g, "")
+    .trim()
+}
+
+const buildUsernameFromName = (name: string) => {
+  const parts = normalizeText(name).split(/\s+/).filter(Boolean)
+
+  if (parts.length === 0) return ""
+
+  const firstName = parts[0]
+  const lastName = parts.length > 1 ? parts[1] : "usuario"
+
+  return `${firstName}.${lastName}`
+}
+
+const getCurrentAccessText = () => {
+  return `Hoy ${new Date().toLocaleTimeString("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`
+}
+
 export function AlertsTab() {
-  const [users, setUsers] = useState<SystemUser[]>(initialUsers)
+  const { currentUser } = useAuth()
+
+  const [users, setUsers] = useState<SystemUser[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<UserRole | "todos">("todos")
   const [statusFilter, setStatusFilter] = useState<UserStatus | "todos">("todos")
@@ -123,11 +161,35 @@ export function AlertsTab() {
   const [isCreating, setIsCreating] = useState(false)
   const [pendingChange, setPendingChange] = useState<PendingUserChange | null>(null)
 
+  const loadUsers = async () => {
+    setIsLoading(true)
+    setError("")
+
+    const { data, error } = await supabase
+      .from("system_users")
+      .select(userSelect)
+      .order("user_code", { ascending: true })
+
+    if (error) {
+      setError(error.message)
+      setUsers([])
+      setIsLoading(false)
+      return
+    }
+
+    setUsers((data || []).map(mapFromDatabase))
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
   const activeUsers = users.filter((user) => user.status === "Activo")
   const inactiveUsers = users.filter((user) => user.status === "Inactivo")
   const adminUsers = users.filter((user) => user.role === "Administrador")
   const coordinatorUsers = users.filter((user) => user.role === "Coordinador")
-  const driverUsers = users.filter((user) => user.role === "Conductor")
+  const driverUsers = users.filter((user) => user.role === "Chofer")
 
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase().trim()
@@ -136,6 +198,7 @@ export function AlertsTab() {
       const matchesSearch =
         !term ||
         user.name.toLowerCase().includes(term) ||
+        user.username.toLowerCase().includes(term) ||
         user.email.toLowerCase().includes(term) ||
         user.role.toLowerCase().includes(term)
 
@@ -146,9 +209,9 @@ export function AlertsTab() {
     })
   }, [users, searchTerm, roleFilter, statusFilter])
 
-  const generateUserId = () => {
+  const generateUserCode = () => {
     const existingNumbers = users
-      .map((user) => Number(user.id.replace("USR-", "")))
+      .map((user) => Number(user.userCode.replace("USR-", "")))
       .filter((number) => !Number.isNaN(number))
 
     const nextNumber = Math.max(...existingNumbers, 0) + 1
@@ -156,24 +219,18 @@ export function AlertsTab() {
     return `USR-${String(nextNumber).padStart(3, "0")}`
   }
 
-  const generateTemporaryPassword = () => {
-    const randomNumber = Math.floor(100000 + Math.random() * 900000)
-    return `SAMU-${randomNumber}`
-  }
-
-  const getCurrentAccessText = () => {
-    return `Hoy ${new Date().toLocaleTimeString("es-CL", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`
+  const buildPasswordFromUsername = (username: string) => {
+    return `${username.trim().toLowerCase()}123`
   }
 
   const iniciarCreacion = () => {
+    const userCode = generateUserCode()
+
     setIsCreating(true)
     setPendingChange(null)
     setEditingForm({
       ...emptyUserForm,
-      temporaryPassword: generateTemporaryPassword(),
+      userCode,
     })
   }
 
@@ -182,7 +239,9 @@ export function AlertsTab() {
     setPendingChange(null)
     setEditingForm({
       originalId: user.id,
+      userCode: user.userCode,
       name: user.name,
+      username: user.username,
       email: user.email,
       role: user.role,
       status: user.status,
@@ -192,9 +251,11 @@ export function AlertsTab() {
 
   const crearUsuarioDesdeFormulario = (form: UserForm): SystemUser => {
     return {
-      id: isCreating ? generateUserId() : form.originalId,
+      id: isCreating ? "" : form.originalId,
+      userCode: form.userCode,
       name: form.name.trim(),
-      email: form.email.trim(),
+      username: form.username.trim().toLowerCase(),
+      email: form.email.trim().toLowerCase(),
       role: form.role,
       status: form.status,
       temporaryPassword: form.temporaryPassword.trim(),
@@ -202,21 +263,45 @@ export function AlertsTab() {
     }
   }
 
-  const guardarFormulario = () => {
+  const guardarFormulario = async () => {
     if (!editingForm) return
 
     if (
       !editingForm.name.trim() ||
+      !editingForm.username.trim() ||
       !editingForm.email.trim() ||
       !editingForm.temporaryPassword.trim()
     ) {
-      window.alert("Debes completar nombre, correo y contraseña temporal.")
+      window.alert("Debes completar nombre, nickname, correo y contraseña.")
       return
     }
 
     const updated = crearUsuarioDesdeFormulario(editingForm)
 
+    if (updated.role === "Administrador") {
+      const anotherAdminExists = users.some(
+        (user) =>
+          user.role === "Administrador" &&
+          user.id !== updated.id &&
+          user.id !== editingForm.originalId
+      )
+
+      if (anotherAdminExists) {
+        window.alert("Solo puede existir un usuario con rol Administrador.")
+        return
+      }
+    }
+
     if (isCreating) {
+      const usernameExists = users.some(
+        (user) => user.username.toLowerCase() === updated.username.toLowerCase()
+      )
+
+      if (usernameExists) {
+        window.alert("Ya existe un usuario con ese nickname.")
+        return
+      }
+
       const emailExists = users.some(
         (user) => user.email.toLowerCase() === updated.email.toLowerCase()
       )
@@ -230,11 +315,13 @@ export function AlertsTab() {
         type: "crear",
         updated,
         changes: [
+          `Código: ${updated.userCode}`,
           `Nombre: ${updated.name}`,
+          `Nickname: ${updated.username}`,
           `Correo: ${updated.email}`,
           `Rol: ${updated.role}`,
           `Estado: ${updated.status}`,
-          `Contraseña temporal: ${updated.temporaryPassword}`,
+          `Contraseña: ${updated.temporaryPassword}`,
         ],
       })
 
@@ -254,10 +341,11 @@ export function AlertsTab() {
     }
 
     addChange("Nombre", original.name, updated.name)
+    addChange("Nickname", original.username, updated.username)
     addChange("Correo", original.email, updated.email)
     addChange("Rol", original.role, updated.role)
     addChange("Estado", original.status, updated.status)
-    addChange("Contraseña temporal", original.temporaryPassword, updated.temporaryPassword)
+    addChange("Contraseña", original.temporaryPassword, updated.temporaryPassword)
 
     if (changes.length === 0) {
       setEditingForm(null)
@@ -275,11 +363,22 @@ export function AlertsTab() {
   }
 
   const solicitarEliminacion = (user: SystemUser) => {
+    if (currentUser?.id === user.id) {
+      window.alert("No puedes eliminar el usuario con el que tienes la sesión iniciada.")
+      return
+    }
+
+    if (user.role === "Administrador") {
+      window.alert("No se puede eliminar el único usuario Administrador desde esta vista.")
+      return
+    }
+
     setPendingChange({
       type: "eliminar",
       original: user,
       changes: [
         `Usuario: ${user.name}`,
+        `Nickname: ${user.username}`,
         `Correo: ${user.email}`,
         `Rol: ${user.role}`,
         `Estado actual: ${user.status}`,
@@ -288,7 +387,7 @@ export function AlertsTab() {
   }
 
   const restablecerContrasena = (user: SystemUser) => {
-    const newPassword = generateTemporaryPassword()
+    const newPassword = buildPasswordFromUsername(user.username)
 
     const updated: SystemUser = {
       ...user,
@@ -302,18 +401,30 @@ export function AlertsTab() {
       updated,
       changes: [
         `Usuario: ${user.name}`,
-        `Correo: ${user.email}`,
-        `Contraseña temporal anterior: ${user.temporaryPassword}`,
-        `Nueva contraseña temporal: ${newPassword}`,
+        `Nickname: ${user.username}`,
+        `Contraseña anterior: ${user.temporaryPassword}`,
+        `Nueva contraseña: ${newPassword}`,
       ],
     })
   }
 
-  const confirmarCambioUsuario = () => {
+  const confirmarCambioUsuario = async () => {
     if (!pendingChange) return
 
     if (pendingChange.type === "crear" && pendingChange.updated) {
-      setUsers((prev) => [...prev, pendingChange.updated!])
+      const { data, error } = await supabase
+        .from("system_users")
+        .insert(mapToDatabase(pendingChange.updated))
+        .select(userSelect)
+        .single()
+
+      if (error) {
+        window.alert(`No se pudo crear el usuario: ${error.message}`)
+        return
+      }
+
+      const savedUser = mapFromDatabase(data)
+      setUsers((prev) => [...prev, savedUser].sort((a, b) => a.userCode.localeCompare(b.userCode)))
     }
 
     if (
@@ -321,17 +432,39 @@ export function AlertsTab() {
       pendingChange.original &&
       pendingChange.updated
     ) {
+      const { data, error } = await supabase
+        .from("system_users")
+        .update(mapToDatabase(pendingChange.updated))
+        .eq("id", pendingChange.original.id)
+        .select(userSelect)
+        .single()
+
+      if (error) {
+        window.alert(`No se pudo actualizar el usuario: ${error.message}`)
+        return
+      }
+
+      const savedUser = mapFromDatabase(data)
+
       setUsers((prev) =>
-        prev.map((user) =>
-          user.id === pendingChange.original!.id ? pendingChange.updated! : user
-        )
+        prev
+          .map((user) => (user.id === pendingChange.original!.id ? savedUser : user))
+          .sort((a, b) => a.userCode.localeCompare(b.userCode))
       )
     }
 
     if (pendingChange.type === "eliminar" && pendingChange.original) {
-      setUsers((prev) =>
-        prev.filter((user) => user.id !== pendingChange.original!.id)
-      )
+      const { error } = await supabase
+        .from("system_users")
+        .delete()
+        .eq("id", pendingChange.original.id)
+
+      if (error) {
+        window.alert(`No se pudo eliminar el usuario: ${error.message}`)
+        return
+      }
+
+      setUsers((prev) => prev.filter((user) => user.id !== pendingChange.original!.id))
     }
 
     setPendingChange(null)
@@ -345,7 +478,9 @@ export function AlertsTab() {
       setIsCreating(true)
       setEditingForm({
         originalId: "",
+        userCode: pendingChange.updated.userCode,
         name: pendingChange.updated.name,
+        username: pendingChange.updated.username,
         email: pendingChange.updated.email,
         role: pendingChange.updated.role,
         status: pendingChange.updated.status,
@@ -357,7 +492,9 @@ export function AlertsTab() {
       setIsCreating(false)
       setEditingForm({
         originalId: pendingChange.original.id,
+        userCode: pendingChange.updated.userCode,
         name: pendingChange.updated.name,
+        username: pendingChange.updated.username,
         email: pendingChange.updated.email,
         role: pendingChange.updated.role,
         status: pendingChange.updated.status,
@@ -385,6 +522,60 @@ export function AlertsTab() {
     </Button>
   )
 
+  const handleNameChange = (value: string) => {
+    if (!editingForm) return
+
+    const username = buildUsernameFromName(value)
+    const shouldAutofill = isCreating || !editingForm.username.trim()
+
+    setEditingForm({
+      ...editingForm,
+      name: value,
+      username: shouldAutofill ? username : editingForm.username,
+      email: shouldAutofill && username ? `${username}@ssvq.cl` : editingForm.email,
+      temporaryPassword:
+        shouldAutofill && username
+          ? buildPasswordFromUsername(username)
+          : editingForm.temporaryPassword,
+    })
+  }
+
+  const handleUsernameChange = (value: string) => {
+    if (!editingForm) return
+
+    const username = value.trim().toLowerCase()
+
+    setEditingForm({
+      ...editingForm,
+      username,
+      temporaryPassword: buildPasswordFromUsername(username),
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <Card className="p-6 border border-gray-200">
+          <p className="text-sm font-inter text-gray-600">
+            Cargando usuarios del sistema...
+          </p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Card className="p-6 border border-red-200 bg-red-50">
+          <p className="text-sm font-inter text-red-700">
+            No fue posible cargar los usuarios: {error}
+          </p>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -393,7 +584,7 @@ export function AlertsTab() {
             Gestión de Usuarios
           </h1>
           <p className="text-sm font-inter text-gray-600">
-            Administración de usuarios del prototipo, roles de acceso y contraseñas temporales.
+            Administración de usuarios, roles de acceso y credenciales del sistema.
           </p>
         </div>
 
@@ -425,7 +616,7 @@ export function AlertsTab() {
         <Card className="p-5 bg-red-50 border-red-200">
           <p className="text-sm font-inter text-red-700">Administradores</p>
           <p className="text-3xl font-inter font-bold text-red-900">{adminUsers.length}</p>
-          <p className="text-xs font-inter text-red-700">Permisos completos</p>
+          <p className="text-xs font-inter text-red-700">Permiso completo</p>
         </Card>
 
         <Card className="p-5 bg-blue-50 border-blue-200">
@@ -435,7 +626,7 @@ export function AlertsTab() {
         </Card>
 
         <Card className="p-5 bg-green-50 border-green-200">
-          <p className="text-sm font-inter text-green-700">Conductores</p>
+          <p className="text-sm font-inter text-green-700">Choferes</p>
           <p className="text-3xl font-inter font-bold text-green-900">{driverUsers.length}</p>
           <p className="text-xs font-inter text-green-700">Registro en terreno</p>
         </Card>
@@ -455,7 +646,7 @@ export function AlertsTab() {
             <Input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar por nombre, correo o rol..."
+              placeholder="Buscar por nombre, nickname, correo o rol..."
               className="pl-10 font-inter"
             />
           </div>
@@ -468,7 +659,7 @@ export function AlertsTab() {
             <option value="todos">Todos los roles</option>
             <option value="Administrador">Administrador</option>
             <option value="Coordinador">Coordinador</option>
-            <option value="Conductor">Conductor</option>
+            <option value="Chofer">Chofer</option>
           </select>
 
           <select
@@ -484,9 +675,9 @@ export function AlertsTab() {
 
         <div className="flex flex-wrap gap-2 mb-4">
           {renderRoleButton("todos", "Todos")}
-          {renderRoleButton("Administrador", "Administradores")}
+          {renderRoleButton("Administrador", "Administrador")}
           {renderRoleButton("Coordinador", "Coordinadores")}
-          {renderRoleButton("Conductor", "Conductores")}
+          {renderRoleButton("Chofer", "Choferes")}
         </div>
 
         {(searchTerm || roleFilter !== "todos" || statusFilter !== "todos") && (
@@ -503,6 +694,7 @@ export function AlertsTab() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Usuario</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-700">Nickname</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Correo</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Rol</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Estado</th>
@@ -523,11 +715,12 @@ export function AlertsTab() {
 
                         <div>
                           <p className="font-semibold text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-500">{user.id}</p>
+                          <p className="text-xs text-gray-500">{user.userCode}</p>
                         </div>
                       </div>
                     </td>
 
+                    <td className="px-4 py-3 text-gray-700">{user.username}</td>
                     <td className="px-4 py-3 text-gray-700">{user.email}</td>
 
                     <td className="px-4 py-3">
@@ -601,7 +794,7 @@ export function AlertsTab() {
                   {isCreating ? "Agregar usuario" : "Editar usuario"}
                 </h2>
                 <p className="text-sm font-inter text-gray-600">
-                  Registra los datos del usuario y sus credenciales temporales de acceso.
+                  Registra los datos del usuario, rol de acceso y contraseña.
                 </p>
               </div>
 
@@ -615,9 +808,16 @@ export function AlertsTab() {
                 <label className="text-sm text-gray-600">Nombre</label>
                 <Input
                   value={editingForm.name}
-                  onChange={(event) =>
-                    setEditingForm({ ...editingForm, name: event.target.value })
-                  }
+                  onChange={(event) => handleNameChange(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600">Nickname</label>
+                <Input
+                  value={editingForm.username}
+                  onChange={(event) => handleUsernameChange(event.target.value)}
+                  placeholder="nombre.apellido"
                 />
               </div>
 
@@ -646,7 +846,7 @@ export function AlertsTab() {
                 >
                   <option value="Administrador">Administrador</option>
                   <option value="Coordinador">Coordinador</option>
-                  <option value="Conductor">Conductor</option>
+                  <option value="Chofer">Chofer</option>
                 </select>
               </div>
 
@@ -667,8 +867,8 @@ export function AlertsTab() {
                 </select>
               </div>
 
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-600">Contraseña temporal</label>
+              <div>
+                <label className="text-sm text-gray-600">Contraseña</label>
                 <div className="flex gap-2">
                   <Input
                     value={editingForm.temporaryPassword}
@@ -686,7 +886,7 @@ export function AlertsTab() {
                     onClick={() =>
                       setEditingForm({
                         ...editingForm,
-                        temporaryPassword: generateTemporaryPassword(),
+                        temporaryPassword: buildPasswordFromUsername(editingForm.username),
                       })
                     }
                   >
@@ -695,12 +895,6 @@ export function AlertsTab() {
                   </Button>
                 </div>
               </div>
-            </div>
-
-            <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 mt-4">
-              <p className="text-sm font-inter text-blue-800">
-                En un sistema real, las contraseñas no deben visualizarse ni almacenarse como texto plano. En este prototipo se usan contraseñas temporales para simular la gestión del administrador.
-              </p>
             </div>
 
             <div className="flex justify-end gap-3 mt-6">
@@ -762,9 +956,9 @@ export function AlertsTab() {
                     {pendingChange.type === "editar" &&
                       "Revisa los datos modificados antes de guardarlos."}
                     {pendingChange.type === "restablecer" &&
-                      "Se generará una nueva contraseña temporal para el usuario."}
+                      "Se actualizará la contraseña del usuario seleccionado."}
                     {pendingChange.type === "eliminar" &&
-                      "Esta acción quitará al usuario del prototipo."}
+                      "Esta acción quitará al usuario del sistema."}
                   </p>
                 </div>
               </div>
@@ -783,8 +977,8 @@ export function AlertsTab() {
             >
               <p className="text-sm font-inter">
                 {pendingChange.type === "eliminar"
-                  ? "Confirma solo si corresponde eliminar este usuario de forma permanente dentro de la sesión actual."
-                  : "Si confirmas, el cambio quedará aplicado en la gestión de usuarios del prototipo."}
+                  ? "Confirma solo si corresponde eliminar este usuario de forma permanente."
+                  : "Si confirmas, el cambio quedará guardado en la base de datos."}
               </p>
             </div>
 
