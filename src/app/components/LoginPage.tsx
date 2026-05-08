@@ -31,7 +31,7 @@ export function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <Card className="w-full max-w-5xl overflow-hidden border border-gray-200 shadow-xl">
         <div className="grid grid-cols-1 lg:grid-cols-2">
-          <div className="bg-red-600 p-8 text-white flex flex-col justify-between">
+          <div className="bg-red-600 p-8 text-white flex flex-col justify-center">
             <div>
               <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center mb-6">
                 <Ambulance className="w-8 h-8 text-white" />
@@ -42,28 +42,9 @@ export function LoginPage() {
               </h1>
 
               <p className="text-sm font-inter text-red-50 mt-4 leading-6">
-                Acceso al sistema de administración de ambulancias, control de kilometraje,
-                mantenciones, usuarios y registros operativos.
+                Acceso al sistema de administración de ambulancias, control de
+                kilometraje, mantenciones, usuarios y registros operativos.
               </p>
-            </div>
-
-            <div className="mt-8 rounded-2xl bg-white/10 border border-white/20 p-4">
-              <p className="text-sm font-inter font-semibold mb-2">
-                Usuarios habilitados
-              </p>
-
-              <div className="space-y-2 text-sm font-inter text-red-50 max-h-48 overflow-y-auto pr-2">
-                <p>Administrador: admin.general / admin.general123</p>
-                <p>Coordinador: camila.torres / camila.torres123</p>
-                <p>Coordinador: felipe.morales / felipe.morales123</p>
-                <p>Coordinador: daniela.fuentes / daniela.fuentes123</p>
-                <p>Chofer: rodrigo.paredes / rodrigo.paredes123</p>
-                <p>Chofer: marcela.rivas / marcela.rivas123</p>
-                <p>Chofer: ignacio.salinas / ignacio.salinas123</p>
-                <p>Chofer: valentina.herrera / valentina.herrera123</p>
-                <p>Chofer: cristian.vega / cristian.vega123</p>
-                <p>Chofer: paula.contreras / paula.contreras123</p>
-              </div>
             </div>
           </div>
 
@@ -117,17 +98,15 @@ export function LoginPage() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full font-inter" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                className="w-full font-inter"
+                disabled={isSubmitting}
+              >
                 <LogIn className="w-4 h-4 mr-2" />
                 {isSubmitting ? "Validando..." : "Entrar al sistema"}
               </Button>
             </form>
-
-            <div className="mt-6 rounded-xl bg-blue-50 border border-blue-200 p-4">
-              <p className="text-sm font-inter text-blue-800">
-                El acceso permite identificar el perfil activo y organizar las funciones del sistema según el rol asignado.
-              </p>
-            </div>
           </div>
         </div>
       </Card>
