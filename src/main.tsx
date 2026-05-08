@@ -7,4 +7,4 @@ createRoot(document.getElementById("root")!).render(
   <AmbulanceProvider>
     <App />
   </AmbulanceProvider>
-)
+)  
