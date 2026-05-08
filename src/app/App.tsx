@@ -1,157 +1,116 @@
-import { useState } from 'react'
-import { SimplifiedDashboard } from './components/SimplifiedDashboard'
-import { FleetTab } from './components/FleetTab'
-import { FuelTab } from './components/FuelTab'
-import { QRFormsTab } from './components/QRFormsTab'
-import { RoutesTab } from './components/RoutesTab'
-import { AlertsTab } from './components/AlertsTab'
-import { ReportsTab } from './components/ReportsTab'
-import { Bell, Settings, User, Search, Ambulance } from 'lucide-react'
-import { Button } from './components/ui/button'
-import { Input } from './components/ui/input'
+import { useState } from "react"
+import { SimplifiedDashboard } from "./components/SimplifiedDashboard"
+import { FleetTab } from "./components/FleetTab"
+import { FuelTab } from "./components/FuelTab"
+import { QRFormsTab } from "./components/QRFormsTab"
+import { RoutesTab } from "./components/RoutesTab"
+import { AlertsTab } from "./components/AlertsTab"
+import { ReportsTab } from "./components/ReportsTab"
+import {
+  Ambulance,
+  FileText,
+  Gauge,
+  Home,
+  QrCode,
+  Users,
+  Wrench,
+} from "lucide-react"
 
-type TabType = 'inicio' | 'ambulancias' | 'kilometraje' | 'qr' | 'mantenimientos' | 'alertas' | 'reportes'
+type TabType =
+  | "inicio"
+  | "ambulancias"
+  | "kilometraje"
+  | "mantenimientos"
+  | "usuarios"
+  | "reportes"
+  | "qr"
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabType>('inicio')
+  const [activeTab, setActiveTab] = useState<TabType>("inicio")
+
+  const tabs: {
+    id: TabType
+    label: string
+    icon: React.ReactNode
+  }[] = [
+    { id: "inicio", label: "Inicio", icon: <Home className="w-4 h-4" /> },
+    { id: "ambulancias", label: "Ambulancias", icon: <Ambulance className="w-4 h-4" /> },
+    { id: "kilometraje", label: "Kilometraje", icon: <Gauge className="w-4 h-4" /> },
+    { id: "mantenimientos", label: "Mantenimientos", icon: <Wrench className="w-4 h-4" /> },
+    { id: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
+    { id: "reportes", label: "Reportes", icon: <FileText className="w-4 h-4" /> },
+    { id: "qr", label: "QR / Formularios", icon: <QrCode className="w-4 h-4" /> },
+  ]
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'ambulancias':
+      case "ambulancias":
         return <FleetTab />
-      case 'kilometraje':
+      case "kilometraje":
         return <FuelTab />
-      case 'qr':
-        return <QRFormsTab />
-      case 'mantenimientos':
+      case "mantenimientos":
         return <RoutesTab />
-      case 'alertas':
+      case "usuarios":
         return <AlertsTab />
-      case 'reportes':
+      case "reportes":
         return <ReportsTab />
+      case "qr":
+        return <QRFormsTab />
       default:
-        return (
-          <main className="p-6">
-            <SimplifiedDashboard />
-          </main>
-        )
+        return <SimplifiedDashboard />
     }
   }
 
   const getTabClassName = (tab: TabType) => {
-    return `text-sm font-inter transition-colors ${
+    return `flex items-center gap-2 text-sm font-inter transition-colors pb-4 ${
       activeTab === tab
-        ? 'text-red-600 border-b-2 border-red-600 pb-4'
-        : 'text-gray-500 hover:text-gray-700 pb-4'
+        ? "text-red-600 border-b-2 border-red-600"
+        : "text-gray-500 hover:text-gray-700"
     }`
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              {/* Logo Ambulancia */}
-              <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center shadow-md">
-                <Ambulance className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl text-gray-900 font-inter font-semibold">Gestión de Mantenimiento Preventivo SAMU - SSVQ</h1>
-                <p className="text-xs text-gray-500 font-inter">Prototipo funcional con datos simulados para futura integración GPS</p>
-              </div>
-            </div>
-            <nav className="flex items-center gap-6">
-              <button
-                onClick={() => setActiveTab('inicio')}
-                className={getTabClassName('inicio')}
-              >
-                Inicio
-              </button>
-              <button
-                onClick={() => setActiveTab('ambulancias')}
-                className={getTabClassName('ambulancias')}
-              >
-                Ambulancias
-              </button>
-              <button
-                onClick={() => setActiveTab('kilometraje')}
-                className={getTabClassName('kilometraje')}
-              >
-                Kilometraje
-              </button>
-              <button
-                onClick={() => setActiveTab('qr')}
-                className={getTabClassName('qr')}
-              >
-                QR / Formularios
-              </button>
-              <button
-                onClick={() => setActiveTab('mantenimientos')}
-                className={getTabClassName('mantenimientos')}
-              >
-                Mantenimientos
-              </button>
-              <button
-                onClick={() => setActiveTab('alertas')}
-                className={getTabClassName('alertas')}
-              >
-                Alertas
-              </button>
-              <button
-                onClick={() => setActiveTab('reportes')}
-                className={getTabClassName('reportes')}
-              >
-                Reportes
-              </button>
-            </nav>
-          </div>
-
+      <header className="bg-white border-b border-gray-200">
+        <div className="px-6 py-5">
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                type="text"
-                placeholder="Buscar ambulancia, patente, estado..."
-                className="w-80 pl-10 bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500 font-inter"
-              />
+            <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+              <Ambulance className="w-7 h-7 text-red-600" />
             </div>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700 relative">
-              <Bell className="w-5 h-5" />
-              {/* Notification indicator */}
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700">
-              <Settings className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700">
-              <User className="w-5 h-5" />
-            </Button>
+
+            <div>
+              <h1 className="text-2xl font-inter font-bold text-gray-900">
+                Gestión de Mantenimiento Preventivo SAMU - SSVQ
+              </h1>
+              <p className="text-sm font-inter text-gray-600">
+                Prototipo funcional con datos simulados para control de kilometraje, mantenciones, usuarios y registros QR.
+              </p>
+            </div>
           </div>
         </div>
+
+        <nav className="px-6 overflow-x-auto">
+          <div className="flex gap-6 min-w-max">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={getTabClassName(tab.id)}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </nav>
       </header>
 
-      {/* Main Content */}
-      {renderContent()}
-      
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between text-sm text-gray-500 font-inter">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Ambulance className="w-4 h-4 text-red-600" />
-              <span>© 2026 Sistema de Mantención de Ambulancias.</span>
-            </div>
-            <span>Control preventivo basado en kilometraje según pauta técnica de kilometraje.</span>
-          </div>
-          <div className="flex items-center gap-6">
-            <span>Última actualización: {new Date().toLocaleTimeString()}</span>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>Sistema en línea</span>
-            </div>
-          </div>
+      <main>{renderContent()}</main>
+
+      <footer className="px-6 py-4 bg-white border-t border-gray-200 mt-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs font-inter text-gray-500">
+          <p>© 2026 Sistema de Gestión de Mantenimiento Preventivo SAMU - SSVQ.</p>
+          <p>Datos simulados para prototipo académico. Última actualización: {new Date().toLocaleTimeString("es-CL")}</p>
         </div>
       </footer>
     </div>
