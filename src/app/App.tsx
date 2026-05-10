@@ -3,6 +3,7 @@ import { SimplifiedDashboard } from "./components/SimplifiedDashboard"
 import { FleetTab } from "./components/FleetTab"
 import { FuelTab } from "./components/FuelTab"
 import { QRFormsTab } from "./components/QRFormsTab"
+import { MapOperationalTab } from "./components/MapOperationalTab"
 import { AlertsTab } from "./components/AlertsTab"
 import { ReportsTab } from "./components/ReportsTab"
 import { LoginPage } from "./components/LoginPage"
@@ -20,12 +21,14 @@ import {
   LogOut,
   Users,
   X,
+  MapPin,
 } from "lucide-react"
 
 type TabType =
   | "inicio"
   | "ambulancias"
   | "kilometraje"
+  | "mapa_operativo"
   | "usuarios"
   | "formularios"
   | "estadisticas"
@@ -280,6 +283,11 @@ function DashboardApp({
       label: "Kilometraje",
       icon: <Gauge className="w-4 h-4" />,
     },
+    {
+      id: "mapa_operativo",
+      label: "Mapa operativo",
+      icon: <MapPin className="w-4 h-4" />,
+    },
     { id: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
     {
       id: "formularios",
@@ -305,6 +313,8 @@ function DashboardApp({
     switch (activeTab) {
       case "ambulancias":
         return <FleetTab />
+      case "mapa_operativo":
+        return <MapOperationalTab />
       case "kilometraje":
         return <FuelTab />
       case "usuarios":
