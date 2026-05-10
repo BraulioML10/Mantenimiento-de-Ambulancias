@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { SimplifiedDashboard } from "./components/SimplifiedDashboard"
 import { FleetTab } from "./components/FleetTab"
 import { FuelTab } from "./components/FuelTab"
@@ -66,20 +66,26 @@ function DashboardApp({
   currentUser: LoggedUser
   logout: () => void
 }) {
-    const isDriver = currentUser.role === "Chofer"
+  const isDriver = currentUser.role === "Chofer"
+  const canSeeNotifications = currentUser.role === "Administrador"
+  const notificationReadKey = `samu_read_notifications_${currentUser.id}`
 
   const [activeTab, setActiveTab] = useState<TabType>(() =>
     isDriver ? "formularios" : "inicio"
   )
   const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
-  const registeredNotificationIds = useRef<Set<string>>(new Set())
-  useEffect(() => {
-  if (isDriver && activeTab !== "formularios") {
-    setActiveTab("formularios")
-  }
-}, [isDriver, activeTab])
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(
+    () => {
+      try {
+        const stored = localStorage.getItem(notificationReadKey)
+        return new Set(stored ? JSON.parse(stored) : [])
+      } catch {
+        return new Set()
+      }
+    }
+  )
+
   const {
     ambulances,
     getUsoDesdeMantencion,
@@ -91,6 +97,12 @@ function DashboardApp({
     preventiveAlertConfig,
   } = useAmbulances()
 
+  useEffect(() => {
+    if (isDriver && activeTab !== "formularios") {
+      setActiveTab("formularios")
+    }
+  }, [isDriver, activeTab])
+
   const userInitials = currentUser.name
     .split(" ")
     .slice(0, 2)
@@ -99,6 +111,8 @@ function DashboardApp({
     .toUpperCase()
 
   const currentNotifications = useMemo<NotificationItem[]>(() => {
+    if (!canSeeNotifications) return []
+
     const result: NotificationItem[] = []
 
     ambulances.forEach((ambulance) => {
@@ -108,47 +122,55 @@ function DashboardApp({
       const faltantes = getKmFaltantes(ambulance)
 
       if (estadoOperativo === "mantencion_preventiva") {
+        const id = `${ambulance.id}-estado-preventiva-${ambulance.lastUpdate}`
+
         result.push({
-          id: `${ambulance.id}-estado-preventiva-${ambulance.lastUpdate}`,
+          id,
           title: `Unidad en mantenimiento preventivo · ${ambulance.id}`,
           description: `${ambulance.patente} se encuentra registrada en mantenimiento preventivo.`,
           time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
           priority: "media",
           badgeLabel: statusConfig[estadoOperativo].shortLabel,
           badgeClass: statusConfig[estadoOperativo].badgeClass,
-          read: false,
+          read: readNotificationIds.has(id),
         })
       }
 
       if (estadoOperativo === "mantencion_correctiva") {
+        const id = `${ambulance.id}-estado-correctiva-${ambulance.lastUpdate}`
+
         result.push({
-          id: `${ambulance.id}-estado-correctiva-${ambulance.lastUpdate}`,
+          id,
           title: `Unidad en mantenimiento correctivo · ${ambulance.id}`,
           description: `${ambulance.patente} se encuentra asociada a una mantención correctiva o incidencia operativa.`,
           time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
           priority: "alta",
           badgeLabel: statusConfig[estadoOperativo].shortLabel,
           badgeClass: statusConfig[estadoOperativo].badgeClass,
-          read: false,
+          read: readNotificationIds.has(id),
         })
       }
 
       if (estadoOperativo === "fuera_servicio") {
+        const id = `${ambulance.id}-estado-fuera-servicio-${ambulance.lastUpdate}`
+
         result.push({
-          id: `${ambulance.id}-estado-fuera-servicio-${ambulance.lastUpdate}`,
+          id,
           title: `Unidad fuera de servicio · ${ambulance.id}`,
           description: `${ambulance.patente} no se encuentra disponible para operación.`,
           time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
           priority: "alta",
           badgeLabel: statusConfig[estadoOperativo].shortLabel,
           badgeClass: statusConfig[estadoOperativo].badgeClass,
-          read: false,
+          read: readNotificationIds.has(id),
         })
       }
 
       if (alertaPreventiva === "mantencion_preventiva_requerida") {
+        const id = `${ambulance.id}-alerta-preventiva-${ambulance.lastUpdate}-${uso}`
+
         result.push({
-          id: `${ambulance.id}-alerta-preventiva-${ambulance.lastUpdate}-${uso}`,
+          id,
           title: `Mantención preventiva requerida · ${ambulance.id}`,
           description: `${ambulance.patente} superó la pauta preventiva configurada. Uso desde última mantención: ${formatKm(
             uso
@@ -157,13 +179,15 @@ function DashboardApp({
           priority: "alta",
           badgeLabel: preventiveAlertConfig[alertaPreventiva].shortLabel,
           badgeClass: preventiveAlertConfig[alertaPreventiva].badgeClass,
-          read: false,
+          read: readNotificationIds.has(id),
         })
       }
 
       if (alertaPreventiva === "proxima_mantencion") {
+        const id = `${ambulance.id}-alerta-proxima-${ambulance.lastUpdate}-${faltantes}`
+
         result.push({
-          id: `${ambulance.id}-alerta-proxima-${ambulance.lastUpdate}-${faltantes}`,
+          id,
           title: `Próxima a mantención · ${ambulance.id}`,
           description: `${ambulance.patente} está próxima a cumplir la pauta preventiva. Faltan ${formatKm(
             faltantes
@@ -172,7 +196,7 @@ function DashboardApp({
           priority: "media",
           badgeLabel: preventiveAlertConfig[alertaPreventiva].shortLabel,
           badgeClass: preventiveAlertConfig[alertaPreventiva].badgeClass,
-          read: false,
+          read: readNotificationIds.has(id),
         })
       }
     })
@@ -180,43 +204,51 @@ function DashboardApp({
     return result
   }, [
     ambulances,
+    canSeeNotifications,
     formatKm,
     getAlertaPreventiva,
     getEstadoCalculado,
     getKmFaltantes,
     getUsoDesdeMantencion,
     preventiveAlertConfig,
+    readNotificationIds,
     statusConfig,
   ])
 
   useEffect(() => {
-    const newNotifications = currentNotifications.filter((notification) => {
-      return !registeredNotificationIds.current.has(notification.id)
+    if (!canSeeNotifications || !isProfileOpen || currentNotifications.length === 0) {
+      return
+    }
+
+    setReadNotificationIds((prev) => {
+      const next = new Set(prev)
+      let changed = false
+
+      currentNotifications.forEach((notification) => {
+        if (!next.has(notification.id)) {
+          next.add(notification.id)
+          changed = true
+        }
+      })
+
+      if (changed) {
+        localStorage.setItem(notificationReadKey, JSON.stringify([...next]))
+      }
+
+      return changed ? next : prev
     })
+  }, [
+    canSeeNotifications,
+    currentNotifications,
+    isProfileOpen,
+    notificationReadKey,
+  ])
 
-    if (newNotifications.length === 0) return
-
-    newNotifications.forEach((notification) => {
-      registeredNotificationIds.current.add(notification.id)
-    })
-
-    setNotifications((prev) => [...newNotifications, ...prev])
-  }, [currentNotifications])
-
-  useEffect(() => {
-    if (!isProfileOpen) return
-
-    setNotifications((prev) =>
-      prev.map((notification) => ({
-        ...notification,
-        read: true,
-      }))
-    )
-  }, [isProfileOpen])
-
-  const unreadNotifications = notifications.filter((notification) => !notification.read)
+  const unreadNotifications = currentNotifications.filter(
+    (notification) => !notification.read
+  )
   const hasUnreadNotifications = unreadNotifications.length > 0
-  const visibleNotifications = notifications.slice(0, 10)
+  const visibleNotifications = currentNotifications.slice(0, 10)
 
   const allTabs: {
     id: TabType
@@ -224,11 +256,27 @@ function DashboardApp({
     icon: ReactNode
   }[] = [
     { id: "inicio", label: "Inicio", icon: <Home className="w-4 h-4" /> },
-    { id: "ambulancias", label: "Ambulancias", icon: <Ambulance className="w-4 h-4" /> },
-    { id: "kilometraje", label: "Kilometraje", icon: <Gauge className="w-4 h-4" /> },
+    {
+      id: "ambulancias",
+      label: "Ambulancias",
+      icon: <Ambulance className="w-4 h-4" />,
+    },
+    {
+      id: "kilometraje",
+      label: "Kilometraje",
+      icon: <Gauge className="w-4 h-4" />,
+    },
     { id: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
-    { id: "formularios", label: "Formularios", icon: <FileText className="w-4 h-4" /> },
-    { id: "estadisticas", label: "Estadísticas", icon: <BarChart3 className="w-4 h-4" /> },
+    {
+      id: "formularios",
+      label: "Formularios",
+      icon: <FileText className="w-4 h-4" />,
+    },
+    {
+      id: "estadisticas",
+      label: "Estadísticas",
+      icon: <BarChart3 className="w-4 h-4" />,
+    },
   ]
 
   const tabs = isDriver
@@ -301,9 +349,11 @@ function DashboardApp({
                     {userInitials}
                   </div>
 
-                  {hasUnreadNotifications && (
+                  {canSeeNotifications && hasUnreadNotifications && (
                     <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
-                      {unreadNotifications.length > 9 ? "9+" : unreadNotifications.length}
+                      {unreadNotifications.length > 9
+                        ? "9+"
+                        : unreadNotifications.length}
                     </span>
                   )}
                 </div>
@@ -324,7 +374,7 @@ function DashboardApp({
                 <div className="absolute right-0 mt-3 w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
                     <h3 className="text-base font-inter font-bold text-gray-900">
-                      Perfil y notificaciones
+                      Perfil
                     </h3>
 
                     <button
@@ -376,79 +426,83 @@ function DashboardApp({
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Bell className="w-5 h-5 text-gray-700" />
-                        <h4 className="text-base font-inter font-bold text-gray-900">
-                          Notificaciones de precaución
-                        </h4>
+                  {canSeeNotifications && (
+                    <div className="p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Bell className="w-5 h-5 text-gray-700" />
+                          <h4 className="text-base font-inter font-bold text-gray-900">
+                            Notificaciones de precaución
+                          </h4>
+                        </div>
+
+                        <span className="text-xs font-inter text-gray-500">
+                          Últimas 10
+                        </span>
                       </div>
 
-                      <span className="text-xs font-inter text-gray-500">
-                        Últimas 10
-                      </span>
-                    </div>
+                      {visibleNotifications.length > 0 ? (
+                        <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+                          {visibleNotifications.map((notification) => (
+                            <div
+                              key={notification.id}
+                              className={`rounded-xl border p-4 ${getNotificationCardClass(
+                                notification.priority
+                              )}`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-inter font-semibold text-gray-900">
+                                      {notification.title}
+                                    </p>
 
-                    {visibleNotifications.length > 0 ? (
-                      <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
-                        {visibleNotifications.map((notification) => (
-                          <div
-                            key={notification.id}
-                            className={`rounded-xl border p-4 ${getNotificationCardClass(
-                              notification.priority
-                            )}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-inter font-semibold text-gray-900">
-                                    {notification.title}
+                                    {!notification.read && (
+                                      <span className="rounded-full bg-red-600 text-white text-[10px] font-inter font-bold px-2 py-0.5">
+                                        Nueva
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-sm font-inter text-gray-700 mt-1">
+                                    {notification.description}
                                   </p>
-
-                                  {!notification.read && (
-                                    <span className="rounded-full bg-red-600 text-white text-[10px] font-inter font-bold px-2 py-0.5">
-                                      Nueva
-                                    </span>
-                                  )}
                                 </div>
 
-                                <p className="text-sm font-inter text-gray-700 mt-1">
-                                  {notification.description}
-                                </p>
+                                <span
+                                  className={`shrink-0 inline-flex items-center rounded-full px-2 py-1 text-[11px] font-inter font-medium ${
+                                    notification.priority === "alta"
+                                      ? "bg-red-100 text-red-700 border border-red-200"
+                                      : "bg-amber-100 text-amber-700 border border-amber-200"
+                                  }`}
+                                >
+                                  {notification.priority === "alta"
+                                    ? "Alta"
+                                    : "Media"}
+                                </span>
                               </div>
 
-                              <span
-                                className={`shrink-0 inline-flex items-center rounded-full px-2 py-1 text-[11px] font-inter font-medium ${
-                                  notification.priority === "alta"
-                                    ? "bg-red-100 text-red-700 border border-red-200"
-                                    : "bg-amber-100 text-amber-700 border border-amber-200"
-                                }`}
-                              >
-                                {notification.priority === "alta" ? "Alta" : "Media"}
-                              </span>
-                            </div>
+                              <div className="mt-3 flex items-center justify-between">
+                                <span className="text-xs font-inter text-gray-500">
+                                  {notification.time}
+                                </span>
 
-                            <div className="mt-3 flex items-center justify-between">
-                              <span className="text-xs font-inter text-gray-500">
-                                {notification.time}
-                              </span>
-
-                              <span
-                                className={`text-xs font-inter font-medium ${notification.badgeClass} rounded-full px-2 py-1 border`}
-                              >
-                                {notification.badgeLabel}
-                              </span>
+                                <span
+                                  className={`text-xs font-inter font-medium ${notification.badgeClass} rounded-full px-2 py-1 border`}
+                                >
+                                  {notification.badgeLabel}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm font-inter text-gray-500">
-                        No hay notificaciones de precaución registradas.
-                      </div>
-                    )}
-                  </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm font-inter text-gray-500">
+                          No hay notificaciones de precaución registradas.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
