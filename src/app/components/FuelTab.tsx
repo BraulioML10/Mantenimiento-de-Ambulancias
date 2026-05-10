@@ -5,14 +5,12 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import {
   AlertTriangle,
-  ArrowDownUp,
   BarChart3,
   Download,
   Eye,
   Gauge,
   Search,
   TrendingUp,
-  Wrench,
   X,
 } from "lucide-react"
 import {
@@ -78,11 +76,6 @@ export function FuelTab() {
           ) / ambulances.length
         )
       : 0
-
-  const maxUso = ambulances.reduce(
-    (max, ambulance) => Math.max(max, getUsoDesdeMantencion(ambulance)),
-    0
-  )
 
   const topNecesidad = useMemo(() => {
     return [...ambulances]
@@ -420,7 +413,8 @@ export function FuelTab() {
             Control de Kilometraje
           </h1>
           <p className="text-sm font-inter text-gray-600">
-            Seguimiento global del kilometraje total, uso desde última mantención y avance preventivo de cada ambulancia.
+            Seguimiento global del kilometraje total, uso desde última mantención
+            y avance preventivo de cada ambulancia.
           </p>
         </div>
 
@@ -599,7 +593,7 @@ export function FuelTab() {
             </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredAmbulances.map((ambulance) => {
               const estadoOperativo = getEstadoCalculado(ambulance)
               const alertaPreventiva = getAlertaPreventiva(ambulance)
@@ -611,101 +605,103 @@ export function FuelTab() {
 
               return (
                 <Card key={ambulance.id} className="p-3 border border-gray-200">
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_2.2fr_auto] gap-3 items-center">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Gauge className="w-5 h-5 text-red-600" />
-                        <h3 className="font-inter font-bold text-gray-900">
+                        <Gauge className="w-4 h-4 text-red-600" />
+                        <h3 className="text-sm font-inter font-bold text-gray-900">
                           {ambulance.id} · {ambulance.patente}
                         </h3>
                       </div>
 
-                      <p className="text-sm font-inter text-gray-600 mt-1">
+                      <p className="text-xs font-inter text-gray-600 mt-1">
                         {ambulance.base}
                       </p>
 
-                      <p className="text-sm font-inter text-gray-500 mt-1">
+                      <p className="text-xs font-inter text-gray-500">
                         {ambulance.modelo}
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <Badge className={`${estadoConfig.badgeClass} font-inter`}>
-                        {estadoConfig.shortLabel}
-                      </Badge>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
+                          <p className="text-[11px] font-inter text-gray-500">
+                            Km total
+                          </p>
+                          <p className="text-xs font-inter font-bold text-gray-900">
+                            {formatKm(ambulance.kilometrajeActual)}
+                          </p>
+                        </div>
 
-                      <Badge className={`${alertaConfig.badgeClass} font-inter`}>
-                        {alertaConfig.shortLabel}
-                      </Badge>
+                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
+                          <p className="text-[11px] font-inter text-gray-500">
+                            Uso mantención
+                          </p>
+                          <p className="text-xs font-inter font-bold text-gray-900">
+                            {formatKm(usoDesdeMantencion)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
+                          <p className="text-[11px] font-inter text-gray-500">
+                            Pauta preventiva
+                          </p>
+                          <p className="text-xs font-inter font-bold text-gray-900">
+                            Cada {formatKm(ambulance.pautaPreventivaKm)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
+                          <p className="text-[11px] font-inter text-gray-500">
+                            Faltan
+                          </p>
+                          <p className="text-xs font-inter font-bold text-gray-900">
+                            {formatKm(kmFaltantes)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-inter mb-1">
+                          <span className="text-gray-600">
+                            Avance preventivo
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {Math.round(progress)}%
+                          </span>
+                        </div>
+
+                        <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className={`h-full ${alertaConfig.progressClass}`}
+                            style={{ width: `${Math.min(100, progress)}%` }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
-                      <p className="text-xs font-inter text-gray-500">
-                        Kilometraje total actual
-                      </p>
-                      <p className="text-xs font-inter font-bold text-gray-900">
-                        {formatKm(ambulance.kilometrajeActual)}
-                      </p>
+                    <div className="flex xl:flex-col items-start xl:items-end justify-between gap-2">
+                      <div className="flex flex-wrap xl:justify-end gap-2">
+                        <Badge className={`${estadoConfig.badgeClass} font-inter`}>
+                          {estadoConfig.shortLabel}
+                        </Badge>
+
+                        <Badge className={`${alertaConfig.badgeClass} font-inter`}>
+                          {alertaConfig.shortLabel}
+                        </Badge>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-inter"
+                        onClick={() => setSelectedAmbulanceId(ambulance.id)}
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        Ver
+                      </Button>
                     </div>
-
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
-                      <p className="text-xs font-inter text-gray-500">
-                        Uso desde última mantención
-                      </p>
-                      <p className="text-xs font-inter font-bold text-gray-900">
-                        {formatKm(usoDesdeMantencion)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
-                      <p className="text-xs font-inter text-gray-500">
-                        Pauta preventiva
-                      </p>
-                      v<p className="text-xs font-inter font-bold text-gray-900">
-                        Cada {formatKm(ambulance.pautaPreventivaKm)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
-                      <p className="text-xs font-inter text-gray-500">
-                        Faltan para próxima mantención
-                      </p>
-                      <p className="text-xs font-inter font-bold text-gray-900">
-                        {formatKm(kmFaltantes)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between text-sm font-inter mb-2">
-                      <span className="text-gray-600">
-                        Avance preventivo por kilometraje
-                      </span>
-                      <span className="font-semibold text-gray-900">
-                        {Math.round(progress)}%
-                      </span>
-                    </div>
-
-                    <div className="w-full h-3 rounded-full bg-gray-200 overflow-hidden">
-                      <div
-                        className={`h-full ${alertaConfig.progressClass}`}
-                        style={{ width: `${Math.min(100, progress)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="font-inter"
-                      onClick={() => setSelectedAmbulanceId(ambulance.id)}
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Ver detalle
-                    </Button>
                   </div>
                 </Card>
               )
@@ -774,7 +770,8 @@ export function FuelTab() {
                   Lectura del indicador
                 </p>
                 <p className="text-sm font-inter text-blue-800 mt-1">
-                  El avance se calcula con el uso desde la última mantención sobre la pauta preventiva definida para cada ambulancia.
+                  El avance se calcula con el uso desde la última mantención sobre
+                  la pauta preventiva definida para cada ambulancia.
                 </p>
               </div>
             </div>
