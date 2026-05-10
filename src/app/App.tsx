@@ -66,13 +66,15 @@ function DashboardApp({
   currentUser: LoggedUser
   logout: () => void
 }) {
-  const isDriver = currentUser.role === "Chofer"
-  const canSeeNotifications = currentUser.role === "Administrador"
+  const userRole = currentUser.role?.trim()
+  const isDriver = userRole === "Chofer"
+  const canSeeNotifications = userRole === "Administrador"
   const notificationReadKey = `samu_read_notifications_${currentUser.id}`
 
   const [activeTab, setActiveTab] = useState<TabType>(() =>
     isDriver ? "formularios" : "inicio"
   )
+
   const [isProfileOpen, setIsProfileOpen] = useState(false)
 
   const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(
@@ -102,6 +104,15 @@ function DashboardApp({
       setActiveTab("formularios")
     }
   }, [isDriver, activeTab])
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(notificationReadKey)
+      setReadNotificationIds(new Set(stored ? JSON.parse(stored) : []))
+    } catch {
+      setReadNotificationIds(new Set())
+    }
+  }, [notificationReadKey])
 
   const userInitials = currentUser.name
     .split(" ")
@@ -244,11 +255,14 @@ function DashboardApp({
     notificationReadKey,
   ])
 
-  const unreadNotifications = currentNotifications.filter(
-    (notification) => !notification.read
-  )
-  const hasUnreadNotifications = unreadNotifications.length > 0
-  const visibleNotifications = currentNotifications.slice(0, 10)
+  const unreadNotifications = canSeeNotifications
+    ? currentNotifications.filter((notification) => !notification.read)
+    : []
+
+  const hasUnreadNotifications = canSeeNotifications && unreadNotifications.length > 0
+  const visibleNotifications = canSeeNotifications
+    ? currentNotifications.slice(0, 10)
+    : []
 
   const allTabs: {
     id: TabType
@@ -374,7 +388,7 @@ function DashboardApp({
                 <div className="absolute right-0 mt-3 w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
                     <h3 className="text-base font-inter font-bold text-gray-900">
-                      Perfil
+                      {canSeeNotifications ? "Perfil y notificaciones" : "Perfil"}
                     </h3>
 
                     <button
