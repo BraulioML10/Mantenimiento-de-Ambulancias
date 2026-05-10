@@ -10,6 +10,7 @@ export function LoginPage() {
 
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [rememberSession, setRememberSession] = useState(false)
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -18,7 +19,7 @@ export function LoginPage() {
     setError("")
     setIsSubmitting(true)
 
-    const result = await login(username, password)
+    const result = await login(username, password, rememberSession)
 
     if (!result.ok) {
       setError(result.message || "No fue posible iniciar sesión.")
@@ -43,7 +44,7 @@ export function LoginPage() {
 
               <p className="text-sm font-inter text-red-50 mt-4 leading-6">
                 Acceso al sistema de administración de ambulancias, control de
-                kilometraje, mantenciones, usuarios y registros operativos.
+                kilometraje, usuarios, formularios y registros operativos.
               </p>
             </div>
           </div>
@@ -53,6 +54,7 @@ export function LoginPage() {
               <h2 className="text-2xl font-inter font-bold text-gray-900">
                 Iniciar sesión
               </h2>
+
               <p className="text-sm font-inter text-gray-600 mt-1">
                 Ingresa con tu nickname y contraseña asignada.
               </p>
@@ -95,6 +97,16 @@ export function LoginPage() {
                   />
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-sm font-inter text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rememberSession}
+                  onChange={(event) => setRememberSession(event.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                Permanecer conectado en este dispositivo
+              </label>
 
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-inter text-red-700">

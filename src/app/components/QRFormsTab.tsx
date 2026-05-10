@@ -43,7 +43,7 @@ interface DocumentAnswer {
 }
 
 interface DamageReport {
-  hasDamage: boolean
+  localId: string
   damageType: string
   affectedArea: string
   description: string
@@ -64,7 +64,7 @@ interface RouteFormState {
   receptionObservations: string
   fuelLevel: string
   manometer: DocumentStatus
-  damage: DamageReport
+  damageReports: DamageReport[]
 }
 
 interface SavedRouteForm {
@@ -85,6 +85,51 @@ interface SavedRouteForm {
 
 const today = new Date().toISOString().slice(0, 10)
 
+const createEmptyDamageReport = (): DamageReport => ({
+  localId: `${Date.now()}-${Math.random()}`,
+  damageType: "",
+  affectedArea: "",
+  description: "",
+})
+
+const damageTypeOptions = [
+  {
+    value: "Q: Quebrado",
+    label: "Q: Quebrado",
+    badgeClass: "bg-blue-100 text-blue-700 border-blue-200",
+  },
+  {
+    value: "A: Abollado",
+    label: "A: Abollado",
+    badgeClass: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+  {
+    value: "F: Falla",
+    label: "F: Falla",
+    badgeClass: "bg-red-100 text-red-700 border-red-200",
+  },
+  {
+    value: "R: Raspón",
+    label: "R: Raspón",
+    badgeClass: "bg-orange-100 text-orange-700 border-orange-200",
+  },
+]
+
+const affectedAreaOptions = [
+  "Frontal",
+  "Posterior",
+  "Lateral izquierdo",
+  "Lateral derecho",
+  "Techo",
+  "Cabina conductor",
+  "Cabina sanitaria",
+  "Puertas",
+  "Vidrios",
+  "Luces",
+  "Parachoques",
+  "Otro",
+]
+
 const emptyRouteForm: RouteFormState = {
   shiftType: "Turno 08:00 a 20:00 horas",
   formDate: today,
@@ -100,12 +145,7 @@ const emptyRouteForm: RouteFormState = {
   receptionObservations: "",
   fuelLevel: "",
   manometer: "",
-  damage: {
-    hasDamage: false,
-    damageType: "",
-    affectedArea: "",
-    description: "",
-  },
+  damageReports: [],
 }
 
 const inspectionItems: InspectionItem[] = [
@@ -329,6 +369,40 @@ export function QRFormsTab() {
     }))
   }
 
+  const addDamageReport = () => {
+    setForm((prev) => ({
+      ...prev,
+      damageReports: [...prev.damageReports, createEmptyDamageReport()],
+    }))
+  }
+
+  const updateDamageReport = (
+    localId: string,
+    field: keyof Omit<DamageReport, "localId">,
+    value: string
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      damageReports: prev.damageReports.map((damage) =>
+        damage.localId === localId
+          ? {
+              ...damage,
+              [field]: value,
+            }
+          : damage
+      ),
+    }))
+  }
+
+  const removeDamageReport = (localId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      damageReports: prev.damageReports.filter(
+        (damage) => damage.localId !== localId
+      ),
+    }))
+  }
+
   const validateForm = () => {
     if (!selectedAmbulance) {
       return "Debes seleccionar y confirmar una ambulancia registrada."
@@ -387,14 +461,15 @@ export function QRFormsTab() {
       return "Debes indicar si permanece el manómetro en la ambulancia."
     }
 
-    if (form.damage.hasDamage) {
-      if (
-        !form.damage.damageType ||
-        !form.damage.affectedArea ||
-        !form.damage.description.trim()
-      ) {
-        return "Si registras daño visible, debes completar tipo de daño, zona afectada y descripción."
-      }
+    const incompleteDamage = form.damageReports.find(
+      (damage) =>
+        !damage.damageType ||
+        !damage.affectedArea ||
+        !damage.description.trim()
+    )
+
+    if (incompleteDamage) {
+      return "Si agregas un daño, debes completar tipo de daño, zona afectada y descripción."
     }
 
     return ""
@@ -437,15 +512,11 @@ export function QRFormsTab() {
       },
     ]
 
-    const damageReportsPayload = form.damage.hasDamage
-      ? [
-          {
-            damage_type: form.damage.damageType,
-            affected_area: form.damage.affectedArea,
-            description: form.damage.description.trim(),
-          },
-        ]
-      : []
+    const damageReportsPayload = form.damageReports.map((damage) => ({
+      damage_type: damage.damageType,
+      affected_area: damage.affectedArea,
+      description: damage.description.trim(),
+    }))
 
     const { error } = await supabase.from("shift_route_forms").insert({
       ambulance_code: selectedAmbulance.id,
@@ -1146,108 +1217,143 @@ export function QRFormsTab() {
           </Card>
 
           <Card className="p-5 border border-gray-200">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-5 h-5 text-gray-700" />
-              <h2 className="text-lg font-inter font-bold text-gray-900">
-                Registro de daños
-              </h2>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-gray-700" />
+                <div>
+                  <h2 className="text-lg font-inter font-bold text-gray-900">
+                    Registro de daños
+                  </h2>
+                  <p className="text-sm font-inter text-gray-600">
+                    Agrega uno o más daños si la ambulancia presenta novedades visibles.
+                  </p>
+                </div>
+              </div>
+
+              <Button className="font-inter" onClick={addDamageReport}>
+                <Plus className="w-4 h-4 mr-2" />
+                Agregar daño
+              </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 font-inter">
-              <div>
-                <label className="text-sm text-gray-600">¿Presenta daños?</label>
-                <select
-                  value={form.damage.hasDamage ? "Sí" : "No"}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      damage: {
-                        ...form.damage,
-                        hasDamage: event.target.value === "Sí",
-                      },
-                    })
-                  }
-                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
-                >
-                  <option value="No">No</option>
-                  <option value="Sí">Sí</option>
-                </select>
+            {form.damageReports.length === 0 ? (
+              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                <p className="text-sm font-inter font-semibold text-green-800">
+                  Sin daños registrados en este formulario.
+                </p>
+                <p className="text-sm font-inter text-green-700 mt-1">
+                  Si la unidad presenta daños, presiona “Agregar daño” para detallar la novedad.
+                </p>
               </div>
+            ) : (
+              <div className="space-y-4">
+                {form.damageReports.map((damage, index) => {
+                  const selectedDamageType = damageTypeOptions.find(
+                    (option) => option.value === damage.damageType
+                  )
 
-              <div>
-                <label className="text-sm text-gray-600">Tipo de daño</label>
-                <select
-                  value={form.damage.damageType}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      damage: {
-                        ...form.damage,
-                        damageType: event.target.value,
-                      },
-                    })
-                  }
-                  disabled={!form.damage.hasDamage}
-                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
-                >
-                  <option value="">Seleccionar</option>
-                  <option value="Q: Quebrado">Q: Quebrado</option>
-                  <option value="A: Abollado">A: Abollado</option>
-                  <option value="F: Falla">F: Falla</option>
-                  <option value="R: Raspón">R: Raspón</option>
-                </select>
-              </div>
+                  return (
+                    <div
+                      key={damage.localId}
+                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-inter font-bold text-gray-900">
+                            Daño {index + 1}
+                          </h3>
 
-              <div>
-                <label className="text-sm text-gray-600">Zona afectada</label>
-                <select
-                  value={form.damage.affectedArea}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      damage: {
-                        ...form.damage,
-                        affectedArea: event.target.value,
-                      },
-                    })
-                  }
-                  disabled={!form.damage.hasDamage}
-                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
-                >
-                  <option value="">Seleccionar</option>
-                  <option value="Frontal">Frontal</option>
-                  <option value="Posterior">Posterior</option>
-                  <option value="Lateral izquierdo">Lateral izquierdo</option>
-                  <option value="Lateral derecho">Lateral derecho</option>
-                  <option value="Techo">Techo</option>
-                  <option value="Cabina conductor">Cabina conductor</option>
-                  <option value="Cabina sanitaria">Cabina sanitaria</option>
-                  <option value="Puertas">Puertas</option>
-                  <option value="Vidrios">Vidrios</option>
-                  <option value="Luces">Luces</option>
-                  <option value="Parachoques">Parachoques</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
+                          {selectedDamageType && (
+                            <Badge
+                              className={`${selectedDamageType.badgeClass} font-inter`}
+                            >
+                              {selectedDamageType.label}
+                            </Badge>
+                          )}
+                        </div>
 
-              <div>
-                <label className="text-sm text-gray-600">Descripción</label>
-                <Input
-                  value={form.damage.description}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      damage: {
-                        ...form.damage,
-                        description: event.target.value,
-                      },
-                    })
-                  }
-                  disabled={!form.damage.hasDamage}
-                  placeholder="Detalle del daño"
-                />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="font-inter text-red-600 hover:text-red-700"
+                          onClick={() => removeDamageReport(damage.localId)}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Eliminar
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-inter">
+                        <div>
+                          <label className="text-sm text-gray-600">
+                            Tipo de daño
+                          </label>
+                          <select
+                            value={damage.damageType}
+                            onChange={(event) =>
+                              updateDamageReport(
+                                damage.localId,
+                                "damageType",
+                                event.target.value
+                              )
+                            }
+                            className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                          >
+                            <option value="">Seleccionar</option>
+                            {damageTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-sm text-gray-600">
+                            Zona afectada
+                          </label>
+                          <select
+                            value={damage.affectedArea}
+                            onChange={(event) =>
+                              updateDamageReport(
+                                damage.localId,
+                                "affectedArea",
+                                event.target.value
+                              )
+                            }
+                            className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                          >
+                            <option value="">Seleccionar</option>
+                            {affectedAreaOptions.map((area) => (
+                              <option key={area} value={area}>
+                                {area}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-sm text-gray-600">
+                            Descripción
+                          </label>
+                          <Input
+                            value={damage.description}
+                            onChange={(event) =>
+                              updateDamageReport(
+                                damage.localId,
+                                "description",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Detalle del daño"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            </div>
+            )}
           </Card>
 
           <div className="flex justify-end gap-3">

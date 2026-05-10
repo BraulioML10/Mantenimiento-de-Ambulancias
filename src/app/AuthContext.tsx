@@ -18,18 +18,25 @@ export interface LoggedUser {
 interface AuthContextValue {
   currentUser: LoggedUser | null
   isLoading: boolean
-  login: (username: string, password: string) => Promise<{ ok: boolean; message?: string }>
+  login: (
+    username: string,
+    password: string,
+    rememberSession: boolean
+  ) => Promise<{ ok: boolean; message?: string }>
   logout: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
+const SESSION_KEY = "samu_current_user"
+const REMEMBER_KEY = "samu_remember_session"
 
 const mapUserFromDatabase = (user: any): LoggedUser => ({
   id: user.id,
   userCode: user.user_code,
   name: user.name,
   username: user.username,
-  email: user.email,
+  email: user.email || "",
   role: user.role,
   status: user.status,
   lastAccess: user.last_access,
@@ -47,16 +54,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("samu_current_user")
+    const storedLocalUser = localStorage.getItem(SESSION_KEY)
+    const storedSessionUser = sessionStorage.getItem(SESSION_KEY)
 
-    if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser))
+    if (storedLocalUser) {
+      setCurrentUser(JSON.parse(storedLocalUser))
+      setIsLoading(false)
+      return
+    }
+
+    if (storedSessionUser) {
+      setCurrentUser(JSON.parse(storedSessionUser))
+      setIsLoading(false)
+      return
     }
 
     setIsLoading(false)
   }, [])
 
-  const login = async (username: string, password: string) => {
+  const login = async (
+    username: string,
+    password: string,
+    rememberSession: boolean
+  ) => {
     const cleanUsername = username.trim().toLowerCase()
     const cleanPassword = password.trim()
 
@@ -104,18 +124,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .single()
 
     const loggedUser = mapUserFromDatabase(
-      updatedUser || { ...data, last_access: newLastAccess }
+      updatedUser || {
+        ...data,
+        last_access: newLastAccess,
+      }
     )
 
     setCurrentUser(loggedUser)
-    localStorage.setItem("samu_current_user", JSON.stringify(loggedUser))
+
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(REMEMBER_KEY)
+    sessionStorage.removeItem(SESSION_KEY)
+
+    if (rememberSession) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(loggedUser))
+      localStorage.setItem(REMEMBER_KEY, "true")
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(loggedUser))
+    }
 
     return { ok: true }
   }
 
   const logout = () => {
     setCurrentUser(null)
-    localStorage.removeItem("samu_current_user")
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(REMEMBER_KEY)
+    sessionStorage.removeItem(SESSION_KEY)
   }
 
   return (
