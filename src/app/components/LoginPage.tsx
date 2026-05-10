@@ -8,8 +8,8 @@ import { useAuth } from "../AuthContext"
 export function LoginPage() {
   const { login } = useAuth()
 
-  const [username, setUsername] = useState("admin.general")
-  const [password, setPassword] = useState("admin.general123")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -54,7 +54,7 @@ export function LoginPage() {
                 Iniciar sesión
               </h2>
               <p className="text-sm font-inter text-gray-600 mt-1">
-                Ingresa con tu nickname y contraseña.
+                Ingresa con tu nickname y contraseña asignada.
               </p>
             </div>
 
@@ -69,10 +69,14 @@ export function LoginPage() {
                   <Input
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
-                    placeholder="nombre.apellido"
+                    placeholder="Ej: juan.perez"
                     className="pl-10 font-inter"
                   />
                 </div>
+
+                <p className="text-xs font-inter text-gray-500 mt-1">
+                  Utiliza el formato nombre.apellido.
+                </p>
               </div>
 
               <div>
@@ -86,7 +90,7 @@ export function LoginPage() {
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="nombre.apellido123"
+                    placeholder="Ingresa tu contraseña"
                     className="pl-10 font-inter"
                   />
                 </div>
