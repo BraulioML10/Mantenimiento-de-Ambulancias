@@ -16,6 +16,11 @@ export type AmbulanceStatus =
   | "mantencion_correctiva"
   | "fuera_servicio"
 
+export type PreventiveAlertStatus =
+  | "sin_alerta"
+  | "proxima_mantencion"
+  | "mantencion_preventiva_requerida"
+
 export interface Ambulance {
   id: string
   patente: string
@@ -24,6 +29,7 @@ export interface Ambulance {
   status: AmbulanceStatus
   kilometrajeActual: number
   kilometrajeUltimaMantencion: number
+  usoDesdeUltimaMantencion: number
   pautaPreventivaKm: number
   lastUpdate: string
 }
@@ -36,6 +42,7 @@ interface DbAmbulance {
   status: AmbulanceStatus
   kilometraje_actual: number
   kilometraje_ultima_mantencion: number
+  uso_desde_ultima_mantencion: number | null
   pauta_preventiva_km: number
   last_update: string
 }
@@ -52,9 +59,19 @@ interface AmbulanceContextValue {
   getKmFaltantes: (ambulance: Ambulance) => number
   getProgressPercentage: (ambulance: Ambulance) => number
   getEstadoCalculado: (ambulance: Ambulance) => AmbulanceStatus
+  getAlertaPreventiva: (ambulance: Ambulance) => PreventiveAlertStatus
   formatKm: (value: number) => string
   statusConfig: Record<
     AmbulanceStatus,
+    {
+      label: string
+      shortLabel: string
+      badgeClass: string
+      progressClass: string
+    }
+  >
+  preventiveAlertConfig: Record<
+    PreventiveAlertStatus,
     {
       label: string
       shortLabel: string
@@ -72,19 +89,19 @@ const statusConfig = {
     progressClass: "bg-green-500",
   },
   proxima_mantencion: {
-    label: "Próxima a mantención",
-    shortLabel: "Próxima",
-    badgeClass: "bg-amber-100 text-amber-700 border-amber-200",
-    progressClass: "bg-amber-500",
+    label: "Operativa",
+    shortLabel: "Operativa",
+    badgeClass: "bg-green-100 text-green-700 border-green-200",
+    progressClass: "bg-green-500",
   },
   mantencion_preventiva: {
-    label: "Mantención requerida",
-    shortLabel: "Requiere mantención",
-    badgeClass: "bg-red-100 text-red-700 border-red-200",
-    progressClass: "bg-red-500",
+    label: "En mantenimiento preventivo",
+    shortLabel: "Preventiva",
+    badgeClass: "bg-blue-100 text-blue-700 border-blue-200",
+    progressClass: "bg-blue-500",
   },
   mantencion_correctiva: {
-    label: "Correctiva reportada",
+    label: "En mantenimiento correctivo",
     shortLabel: "Correctiva",
     badgeClass: "bg-orange-100 text-orange-700 border-orange-200",
     progressClass: "bg-orange-500",
@@ -96,6 +113,27 @@ const statusConfig = {
     progressClass: "bg-gray-500",
   },
 } satisfies AmbulanceContextValue["statusConfig"]
+
+const preventiveAlertConfig = {
+  sin_alerta: {
+    label: "Sin alerta preventiva",
+    shortLabel: "Sin alerta",
+    badgeClass: "bg-green-100 text-green-700 border-green-200",
+    progressClass: "bg-green-500",
+  },
+  proxima_mantencion: {
+    label: "Próxima a mantención",
+    shortLabel: "Próxima",
+    badgeClass: "bg-amber-100 text-amber-700 border-amber-200",
+    progressClass: "bg-amber-500",
+  },
+  mantencion_preventiva_requerida: {
+    label: "Mantención preventiva requerida",
+    shortLabel: "Requiere mantención",
+    badgeClass: "bg-red-100 text-red-700 border-red-200",
+    progressClass: "bg-red-500",
+  },
+} satisfies AmbulanceContextValue["preventiveAlertConfig"]
 
 const AmbulanceContext = createContext<AmbulanceContextValue | undefined>(undefined)
 
@@ -113,30 +151,6 @@ const sortAmbulances = (items: Ambulance[]) => {
   )
 }
 
-const mapFromDatabase = (row: DbAmbulance): Ambulance => ({
-  id: row.code,
-  patente: row.patente,
-  base: row.base,
-  modelo: row.modelo,
-  status: row.status,
-  kilometrajeActual: row.kilometraje_actual,
-  kilometrajeUltimaMantencion: row.kilometraje_ultima_mantencion,
-  pautaPreventivaKm: row.pauta_preventiva_km,
-  lastUpdate: row.last_update,
-})
-
-const mapToDatabase = (ambulance: Ambulance) => ({
-  code: ambulance.id.trim().toUpperCase(),
-  patente: ambulance.patente.trim().toUpperCase(),
-  base: ambulance.base.trim(),
-  modelo: ambulance.modelo.trim(),
-  status: ambulance.status,
-  kilometraje_actual: ambulance.kilometrajeActual,
-  kilometraje_ultima_mantencion: ambulance.kilometrajeUltimaMantencion,
-  pauta_preventiva_km: ambulance.pautaPreventivaKm,
-  last_update: ambulance.lastUpdate || getCurrentTime(),
-})
-
 const ambulanceSelect = `
   code,
   patente,
@@ -145,41 +159,99 @@ const ambulanceSelect = `
   status,
   kilometraje_actual,
   kilometraje_ultima_mantencion,
+  uso_desde_ultima_mantencion,
   pauta_preventiva_km,
   last_update
 `
 
+const normalizeStatusFromDatabase = (status: AmbulanceStatus): AmbulanceStatus => {
+  if (status === "proxima_mantencion") return "operativa"
+
+  return status
+}
+
+const mapFromDatabase = (row: DbAmbulance): Ambulance => {
+  const usoDesdeUltimaMantencion =
+    row.uso_desde_ultima_mantencion ??
+    Math.max(0, row.kilometraje_actual - row.kilometraje_ultima_mantencion)
+
+  return {
+    id: row.code,
+    patente: row.patente,
+    base: row.base,
+    modelo: row.modelo,
+    status: normalizeStatusFromDatabase(row.status),
+    kilometrajeActual: row.kilometraje_actual,
+    kilometrajeUltimaMantencion: row.kilometraje_ultima_mantencion,
+    usoDesdeUltimaMantencion,
+    pautaPreventivaKm: row.pauta_preventiva_km,
+    lastUpdate: row.last_update,
+  }
+}
+
+const mapToDatabase = (ambulance: Ambulance) => ({
+  code: ambulance.id.trim().toUpperCase(),
+  patente: ambulance.patente.trim().toUpperCase(),
+  base: ambulance.base.trim(),
+  modelo: ambulance.modelo.trim(),
+  status:
+    ambulance.status === "proxima_mantencion"
+      ? "operativa"
+      : ambulance.status,
+  kilometraje_actual: ambulance.kilometrajeActual,
+  kilometraje_ultima_mantencion: Math.max(
+    0,
+    ambulance.kilometrajeActual - ambulance.usoDesdeUltimaMantencion
+  ),
+  uso_desde_ultima_mantencion: ambulance.usoDesdeUltimaMantencion,
+  pauta_preventiva_km: ambulance.pautaPreventivaKm,
+  last_update: ambulance.lastUpdate || getCurrentTime(),
+})
+
 const getUsoDesdeMantencion = (ambulance: Ambulance) =>
-  ambulance.kilometrajeActual - ambulance.kilometrajeUltimaMantencion
+  Math.max(0, ambulance.usoDesdeUltimaMantencion)
 
 const getKmFaltantes = (ambulance: Ambulance) =>
   Math.max(0, ambulance.pautaPreventivaKm - getUsoDesdeMantencion(ambulance))
 
-const getProgressPercentage = (ambulance: Ambulance) =>
-  Math.min(
+const getProgressPercentage = (ambulance: Ambulance) => {
+  if (ambulance.pautaPreventivaKm <= 0) return 0
+
+  return Math.min(
     100,
     (getUsoDesdeMantencion(ambulance) / ambulance.pautaPreventivaKm) * 100
   )
+}
 
 const getEstadoCalculado = (ambulance: Ambulance): AmbulanceStatus => {
+  if (ambulance.status === "proxima_mantencion") {
+    return "operativa"
+  }
+
+  return ambulance.status
+}
+
+const getAlertaPreventiva = (ambulance: Ambulance): PreventiveAlertStatus => {
+  const estadoOperativo = getEstadoCalculado(ambulance)
+
   if (
-    ambulance.status === "mantencion_correctiva" ||
-    ambulance.status === "fuera_servicio"
+    estadoOperativo === "mantencion_correctiva" ||
+    estadoOperativo === "fuera_servicio"
   ) {
-    return ambulance.status
+    return "sin_alerta"
   }
 
   const usoDesdeMantencion = getUsoDesdeMantencion(ambulance)
 
   if (usoDesdeMantencion >= ambulance.pautaPreventivaKm) {
-    return "mantencion_preventiva"
+    return "mantencion_preventiva_requerida"
   }
 
   if (usoDesdeMantencion >= ambulance.pautaPreventivaKm * 0.8) {
     return "proxima_mantencion"
   }
 
-  return "operativa"
+  return "sin_alerta"
 }
 
 export function AmbulanceProvider({ children }: { children: ReactNode }) {
@@ -233,7 +305,10 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
     const newAmbulance = mapFromDatabase(data)
 
     setAmbulances((prev) =>
-      sortAmbulances([...prev.filter((item) => item.id !== newAmbulance.id), newAmbulance])
+      sortAmbulances([
+        ...prev.filter((item) => item.id !== newAmbulance.id),
+        newAmbulance,
+      ])
     )
   }
 
@@ -264,7 +339,9 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
 
     setAmbulances((prev) =>
       sortAmbulances([
-        ...prev.filter((item) => item.id !== originalId && item.id !== savedAmbulance.id),
+        ...prev.filter(
+          (item) => item.id !== originalId && item.id !== savedAmbulance.id
+        ),
         savedAmbulance,
       ])
     )
@@ -294,8 +371,10 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
       getKmFaltantes,
       getProgressPercentage,
       getEstadoCalculado,
+      getAlertaPreventiva,
       formatKm,
       statusConfig,
+      preventiveAlertConfig,
     }),
     [ambulances, isLoading, error, refreshAmbulances]
   )

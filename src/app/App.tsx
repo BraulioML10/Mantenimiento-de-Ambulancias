@@ -3,24 +3,22 @@ import { SimplifiedDashboard } from "./components/SimplifiedDashboard"
 import { FleetTab } from "./components/FleetTab"
 import { FuelTab } from "./components/FuelTab"
 import { QRFormsTab } from "./components/QRFormsTab"
-import { RoutesTab } from "./components/RoutesTab"
 import { AlertsTab } from "./components/AlertsTab"
 import { ReportsTab } from "./components/ReportsTab"
 import { LoginPage } from "./components/LoginPage"
 import { Button } from "./components/ui/button"
-import { useAmbulances, type AmbulanceStatus } from "./AmbulanceContext"
+import { useAmbulances } from "./AmbulanceContext"
 import { useAuth, type LoggedUser } from "./AuthContext"
 import {
   Ambulance,
+  BarChart3,
   Bell,
   ChevronDown,
   FileText,
   Gauge,
   Home,
   LogOut,
-  QrCode,
   Users,
-  Wrench,
   X,
 } from "lucide-react"
 
@@ -28,16 +26,9 @@ type TabType =
   | "inicio"
   | "ambulancias"
   | "kilometraje"
-  | "mantenimientos"
   | "usuarios"
-  | "reportes"
-  | "qr"
-
-type NotificationStatus =
-  | "proxima_mantencion"
-  | "mantencion_preventiva"
-  | "mantencion_correctiva"
-  | "fuera_servicio"
+  | "formularios"
+  | "estadisticas"
 
 interface NotificationItem {
   id: string
@@ -45,7 +36,8 @@ interface NotificationItem {
   description: string
   time: string
   priority: "alta" | "media"
-  status: NotificationStatus
+  badgeLabel: string
+  badgeClass: string
   read: boolean
 }
 
@@ -82,11 +74,13 @@ function DashboardApp({
 
   const {
     ambulances,
-    getEstadoCalculado,
     getUsoDesdeMantencion,
     getKmFaltantes,
+    getEstadoCalculado,
+    getAlertaPreventiva,
     formatKm,
     statusConfig,
+    preventiveAlertConfig,
   } = useAmbulances()
 
   const userInitials = currentUser.name
@@ -96,76 +90,99 @@ function DashboardApp({
     .join("")
     .toUpperCase()
 
-  const currentAlarmNotifications = useMemo<NotificationItem[]>(() => {
-    return ambulances
-      .map((ambulance) => {
-        const status = getEstadoCalculado(ambulance)
+  const currentNotifications = useMemo<NotificationItem[]>(() => {
+    const result: NotificationItem[] = []
 
-        if (
-          status !== "mantencion_preventiva" &&
-          status !== "mantencion_correctiva" &&
-          status !== "fuera_servicio" &&
-          status !== "proxima_mantencion"
-        ) {
-          return null
-        }
+    ambulances.forEach((ambulance) => {
+      const estadoOperativo = getEstadoCalculado(ambulance)
+      const alertaPreventiva = getAlertaPreventiva(ambulance)
+      const uso = getUsoDesdeMantencion(ambulance)
+      const faltantes = getKmFaltantes(ambulance)
 
-        const uso = getUsoDesdeMantencion(ambulance)
-        const faltantes = getKmFaltantes(ambulance)
-
-        let title = ""
-        let description = ""
-        let priority: "alta" | "media" = "media"
-
-        if (status === "mantencion_preventiva") {
-          title = `Mantención preventiva requerida · ${ambulance.id}`
-          description = `${ambulance.patente} superó la pauta preventiva configurada. Uso acumulado: ${formatKm(
-            uso
-          )}.`
-          priority = "alta"
-        }
-
-        if (status === "mantencion_correctiva") {
-          title = `Mantención correctiva reportada · ${ambulance.id}`
-          description = `${ambulance.patente} presenta estado correctivo y requiere seguimiento.`
-          priority = "alta"
-        }
-
-        if (status === "fuera_servicio") {
-          title = `Unidad fuera de servicio · ${ambulance.id}`
-          description = `${ambulance.patente} no se encuentra disponible para operación.`
-          priority = "alta"
-        }
-
-        if (status === "proxima_mantencion") {
-          title = `Próxima a mantención · ${ambulance.id}`
-          description = `${ambulance.patente} está próxima a cumplir la pauta preventiva. Faltan ${formatKm(
-            faltantes
-          )}.`
-          priority = "media"
-        }
-
-        return {
-          id: `${ambulance.id}-${status}-${ambulance.lastUpdate}-${uso}-${faltantes}`,
-          title,
-          description,
+      if (estadoOperativo === "mantencion_preventiva") {
+        result.push({
+          id: `${ambulance.id}-estado-preventiva-${ambulance.lastUpdate}`,
+          title: `Unidad en mantenimiento preventivo · ${ambulance.id}`,
+          description: `${ambulance.patente} se encuentra registrada en mantenimiento preventivo.`,
           time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
-          priority,
-          status,
+          priority: "media",
+          badgeLabel: statusConfig[estadoOperativo].shortLabel,
+          badgeClass: statusConfig[estadoOperativo].badgeClass,
           read: false,
-        }
-      })
-      .filter((item): item is NotificationItem => item !== null)
+        })
+      }
+
+      if (estadoOperativo === "mantencion_correctiva") {
+        result.push({
+          id: `${ambulance.id}-estado-correctiva-${ambulance.lastUpdate}`,
+          title: `Unidad en mantenimiento correctivo · ${ambulance.id}`,
+          description: `${ambulance.patente} se encuentra asociada a una mantención correctiva o incidencia operativa.`,
+          time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
+          priority: "alta",
+          badgeLabel: statusConfig[estadoOperativo].shortLabel,
+          badgeClass: statusConfig[estadoOperativo].badgeClass,
+          read: false,
+        })
+      }
+
+      if (estadoOperativo === "fuera_servicio") {
+        result.push({
+          id: `${ambulance.id}-estado-fuera-servicio-${ambulance.lastUpdate}`,
+          title: `Unidad fuera de servicio · ${ambulance.id}`,
+          description: `${ambulance.patente} no se encuentra disponible para operación.`,
+          time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
+          priority: "alta",
+          badgeLabel: statusConfig[estadoOperativo].shortLabel,
+          badgeClass: statusConfig[estadoOperativo].badgeClass,
+          read: false,
+        })
+      }
+
+      if (alertaPreventiva === "mantencion_preventiva_requerida") {
+        result.push({
+          id: `${ambulance.id}-alerta-preventiva-${ambulance.lastUpdate}-${uso}`,
+          title: `Mantención preventiva requerida · ${ambulance.id}`,
+          description: `${ambulance.patente} superó la pauta preventiva configurada. Uso desde última mantención: ${formatKm(
+            uso
+          )}.`,
+          time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
+          priority: "alta",
+          badgeLabel: preventiveAlertConfig[alertaPreventiva].shortLabel,
+          badgeClass: preventiveAlertConfig[alertaPreventiva].badgeClass,
+          read: false,
+        })
+      }
+
+      if (alertaPreventiva === "proxima_mantencion") {
+        result.push({
+          id: `${ambulance.id}-alerta-proxima-${ambulance.lastUpdate}-${faltantes}`,
+          title: `Próxima a mantención · ${ambulance.id}`,
+          description: `${ambulance.patente} está próxima a cumplir la pauta preventiva. Faltan ${formatKm(
+            faltantes
+          )}.`,
+          time: ambulance.lastUpdate ? `${ambulance.lastUpdate} hrs` : "Sin registro",
+          priority: "media",
+          badgeLabel: preventiveAlertConfig[alertaPreventiva].shortLabel,
+          badgeClass: preventiveAlertConfig[alertaPreventiva].badgeClass,
+          read: false,
+        })
+      }
+    })
+
+    return result
   }, [
     ambulances,
     formatKm,
+    getAlertaPreventiva,
     getEstadoCalculado,
     getKmFaltantes,
     getUsoDesdeMantencion,
+    preventiveAlertConfig,
+    statusConfig,
   ])
 
   useEffect(() => {
-    const newNotifications = currentAlarmNotifications.filter((notification) => {
+    const newNotifications = currentNotifications.filter((notification) => {
       return !registeredNotificationIds.current.has(notification.id)
     })
 
@@ -176,7 +193,7 @@ function DashboardApp({
     })
 
     setNotifications((prev) => [...newNotifications, ...prev])
-  }, [currentAlarmNotifications])
+  }, [currentNotifications])
 
   useEffect(() => {
     if (!isProfileOpen) return
@@ -201,10 +218,9 @@ function DashboardApp({
     { id: "inicio", label: "Inicio", icon: <Home className="w-4 h-4" /> },
     { id: "ambulancias", label: "Ambulancias", icon: <Ambulance className="w-4 h-4" /> },
     { id: "kilometraje", label: "Kilometraje", icon: <Gauge className="w-4 h-4" /> },
-    { id: "mantenimientos", label: "Mantenimientos", icon: <Wrench className="w-4 h-4" /> },
     { id: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
-    { id: "reportes", label: "Reportes", icon: <FileText className="w-4 h-4" /> },
-    { id: "qr", label: "QR / Formularios", icon: <QrCode className="w-4 h-4" /> },
+    { id: "formularios", label: "Formularios", icon: <FileText className="w-4 h-4" /> },
+    { id: "estadisticas", label: "Estadísticas", icon: <BarChart3 className="w-4 h-4" /> },
   ]
 
   const renderContent = () => {
@@ -213,14 +229,12 @@ function DashboardApp({
         return <FleetTab />
       case "kilometraje":
         return <FuelTab />
-      case "mantenimientos":
-        return <RoutesTab />
       case "usuarios":
         return <AlertsTab />
-      case "reportes":
-        return <ReportsTab />
-      case "qr":
+      case "formularios":
         return <QRFormsTab />
+      case "estadisticas":
+        return <ReportsTab />
       default:
         return <SimplifiedDashboard />
     }
@@ -255,7 +269,8 @@ function DashboardApp({
                   Gestión de Mantenimiento Preventivo SAMU - SSVQ
                 </h1>
                 <p className="text-sm font-inter text-gray-600">
-                  Sistema de gestión para control de kilometraje, mantenciones, usuarios y registros QR.
+                  Sistema de gestión para control de ambulancias, kilometraje,
+                  usuarios, formularios y estadísticas operativas.
                 </p>
               </div>
             </div>
@@ -316,7 +331,7 @@ function DashboardApp({
                         </p>
 
                         <p className="text-sm font-inter text-gray-600 break-all">
-                          {currentUser.email}
+                          {currentUser.email || "Sin correo registrado"}
                         </p>
 
                         <p className="text-xs font-inter text-gray-500 mt-1">
@@ -404,11 +419,9 @@ function DashboardApp({
                               </span>
 
                               <span
-                                className={`text-xs font-inter font-medium ${
-                                  statusConfig[notification.status].badgeClass
-                                } rounded-full px-2 py-1 border`}
+                                className={`text-xs font-inter font-medium ${notification.badgeClass} rounded-full px-2 py-1 border`}
                               >
-                                {statusConfig[notification.status].shortLabel}
+                                {notification.badgeLabel}
                               </span>
                             </div>
                           </div>
@@ -448,7 +461,7 @@ function DashboardApp({
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs font-inter text-gray-500">
           <p>© 2026 Sistema de Gestión de Mantenimiento Preventivo SAMU - SSVQ.</p>
           <p>
-            Sistema de gestión de mantenimiento preventivo SAMU - SSVQ. Última actualización:{" "}
+            Última actualización de sesión:{" "}
             {new Date().toLocaleTimeString("es-CL")}
           </p>
         </div>
