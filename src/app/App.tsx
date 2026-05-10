@@ -66,12 +66,20 @@ function DashboardApp({
   currentUser: LoggedUser
   logout: () => void
 }) {
-  const [activeTab, setActiveTab] = useState<TabType>("inicio")
+    const isDriver = currentUser.role === "Chofer"
+
+  const [activeTab, setActiveTab] = useState<TabType>(() =>
+    isDriver ? "formularios" : "inicio"
+  )
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
   const registeredNotificationIds = useRef<Set<string>>(new Set())
-
+  useEffect(() => {
+  if (isDriver && activeTab !== "formularios") {
+    setActiveTab("formularios")
+  }
+}, [isDriver, activeTab])
   const {
     ambulances,
     getUsoDesdeMantencion,
@@ -210,7 +218,7 @@ function DashboardApp({
   const hasUnreadNotifications = unreadNotifications.length > 0
   const visibleNotifications = notifications.slice(0, 10)
 
-  const tabs: {
+  const allTabs: {
     id: TabType
     label: string
     icon: ReactNode
@@ -223,7 +231,15 @@ function DashboardApp({
     { id: "estadisticas", label: "Estadísticas", icon: <BarChart3 className="w-4 h-4" /> },
   ]
 
+  const tabs = isDriver
+    ? allTabs.filter((tab) => tab.id === "formularios")
+    : allTabs
+
   const renderContent = () => {
+    if (isDriver) {
+      return <QRFormsTab />
+    }
+
     switch (activeTab) {
       case "ambulancias":
         return <FleetTab />
