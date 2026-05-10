@@ -22,7 +22,13 @@ import {
   type AmbulanceStatus,
   type PreventiveAlertStatus,
 } from "../AmbulanceContext"
-
+type SortOption =
+  | "codigo"
+  | "estado"
+  | "mayor_km_total"
+  | "mayor_uso"
+  | "mayor_necesidad"
+  | "mayor_margen"
 interface AmbulanceForm {
   originalId: string
   id: string
@@ -73,6 +79,7 @@ export function FleetTab() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<AmbulanceStatus | "todos">("todos")
   const [alertFilter, setAlertFilter] = useState<PreventiveAlertStatus | "todos">("todos")
+  const [sortOption, setSortOption] = useState<SortOption>("codigo")
   const [selectedAmbulanceId, setSelectedAmbulanceId] = useState<string | null>(null)
   const [editingForm, setEditingForm] = useState<AmbulanceForm | null>(null)
   const [isCreating, setIsCreating] = useState(false)
@@ -110,48 +117,98 @@ export function FleetTab() {
       getAlertaPreventiva(ambulance) === "mantencion_preventiva_requerida"
   ).length
 
-  const filteredAmbulances = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim()
+ const filteredAmbulances = useMemo(() => {
+  const term = searchTerm.toLowerCase().trim()
 
-    return ambulances.filter((ambulance) => {
-      const estadoOperativo = getEstadoCalculado(ambulance)
-      const alertaPreventiva = getAlertaPreventiva(ambulance)
+  const filtered = ambulances.filter((ambulance) => {
+    const estadoOperativo = getEstadoCalculado(ambulance)
+    const alertaPreventiva = getAlertaPreventiva(ambulance)
 
-      const estadoTexto = statusConfig[estadoOperativo].label.toLowerCase()
-      const alertaTexto = preventiveAlertConfig[alertaPreventiva].label.toLowerCase()
+    const estadoTexto = statusConfig[estadoOperativo].label.toLowerCase()
+    const alertaTexto = preventiveAlertConfig[alertaPreventiva].label.toLowerCase()
 
-      const matchesSearch =
-        !term ||
-        ambulance.id.toLowerCase().includes(term) ||
-        ambulance.patente.toLowerCase().includes(term) ||
-        ambulance.base.toLowerCase().includes(term) ||
-        ambulance.modelo.toLowerCase().includes(term) ||
-        estadoTexto.includes(term) ||
-        alertaTexto.includes(term)
+    const matchesSearch =
+      !term ||
+      ambulance.id.toLowerCase().includes(term) ||
+      ambulance.patente.toLowerCase().includes(term) ||
+      ambulance.base.toLowerCase().includes(term) ||
+      ambulance.modelo.toLowerCase().includes(term) ||
+      estadoTexto.includes(term) ||
+      alertaTexto.includes(term)
 
-      const matchesStatus =
-        statusFilter === "todos" || estadoOperativo === statusFilter
+    const matchesStatus =
+      statusFilter === "todos" || estadoOperativo === statusFilter
 
-      const matchesAlert =
-        alertFilter === "todos" || alertaPreventiva === alertFilter
+    const matchesAlert =
+      alertFilter === "todos" || alertaPreventiva === alertFilter
 
-      return matchesSearch && matchesStatus && matchesAlert
-    })
-  }, [
-    ambulances,
-    searchTerm,
-    statusFilter,
-    alertFilter,
-    getEstadoCalculado,
-    getAlertaPreventiva,
-    statusConfig,
-    preventiveAlertConfig,
-  ])
+    return matchesSearch && matchesStatus && matchesAlert
+  })
+
+  return filtered.sort((a, b) => {
+    if (sortOption === "codigo") {
+      return a.id.localeCompare(b.id, "es-CL", { numeric: true })
+    }
+
+    if (sortOption === "estado") {
+      return statusConfig[getEstadoCalculado(a)].label.localeCompare(
+        statusConfig[getEstadoCalculado(b)].label,
+        "es-CL"
+      )
+    }
+
+    if (sortOption === "mayor_km_total") {
+      return b.kilometrajeActual - a.kilometrajeActual
+    }
+
+    if (sortOption === "mayor_uso") {
+      return getUsoDesdeMantencion(b) - getUsoDesdeMantencion(a)
+    }
+
+    if (sortOption === "mayor_margen") {
+      return getKmFaltantes(b) - getKmFaltantes(a)
+    }
+
+    const alertaA = getAlertaPreventiva(a)
+    const alertaB = getAlertaPreventiva(b)
+
+    const pesoA =
+      alertaA === "mantencion_preventiva_requerida"
+        ? 3
+        : alertaA === "proxima_mantencion"
+          ? 2
+          : 1
+
+    const pesoB =
+      alertaB === "mantencion_preventiva_requerida"
+        ? 3
+        : alertaB === "proxima_mantencion"
+          ? 2
+          : 1
+
+    if (pesoA !== pesoB) return pesoB - pesoA
+
+    return getKmFaltantes(a) - getKmFaltantes(b)
+  })
+}, [
+  ambulances,
+  searchTerm,
+  statusFilter,
+  alertFilter,
+  sortOption,
+  getEstadoCalculado,
+  getAlertaPreventiva,
+  getUsoDesdeMantencion,
+  getKmFaltantes,
+  statusConfig,
+  preventiveAlertConfig,
+])
 
   const limpiarFiltros = () => {
     setSearchTerm("")
     setStatusFilter("todos")
     setAlertFilter("todos")
+    setSortOption("codigo")
   }
 
   const formFromAmbulance = (
@@ -597,7 +654,7 @@ export function FleetTab() {
       </div>
 
       <Card className="p-5 border border-gray-200">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 mb-4">
           <div className="relative lg:col-span-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
@@ -640,6 +697,18 @@ export function FleetTab() {
               Mantención requerida
             </option>
           </select>
+                    <select
+            value={sortOption}
+            onChange={(event) => setSortOption(event.target.value as SortOption)}
+            className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm font-inter"
+          >
+            <option value="codigo">Orden por código móvil</option>
+            <option value="estado">Orden por estado operativo</option>
+            <option value="mayor_km_total">Mayor kilometraje total</option>
+            <option value="mayor_uso">Mayor uso desde última mantención</option>
+            <option value="mayor_necesidad">Mayor necesidad preventiva</option>
+            <option value="mayor_margen">Mayor margen disponible</option>
+          </select>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
@@ -660,7 +729,10 @@ export function FleetTab() {
           )}
         </div>
 
-        {(searchTerm || statusFilter !== "todos" || alertFilter !== "todos") && (
+        {(searchTerm ||
+          statusFilter !== "todos" ||
+          alertFilter !== "todos" ||
+          sortOption !== "codigo") && (
           <div className="mb-4">
             <Button variant="outline" size="sm" className="font-inter" onClick={limpiarFiltros}>
               Limpiar filtros

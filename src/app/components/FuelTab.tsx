@@ -610,7 +610,7 @@ export function FuelTab() {
               const progress = getProgressPercentage(ambulance)
 
               return (
-                <Card key={ambulance.id} className="p-4 border border-gray-200">
+                <Card key={ambulance.id} className="p-3 border border-gray-200">
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -640,30 +640,30 @@ export function FuelTab() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
                       <p className="text-xs font-inter text-gray-500">
                         Kilometraje total actual
                       </p>
-                      <p className="text-sm font-inter font-bold text-gray-900">
+                      <p className="text-xs font-inter font-bold text-gray-900">
                         {formatKm(ambulance.kilometrajeActual)}
                       </p>
                     </div>
 
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
                       <p className="text-xs font-inter text-gray-500">
                         Uso desde última mantención
                       </p>
-                      <p className="text-sm font-inter font-bold text-gray-900">
+                      <p className="text-xs font-inter font-bold text-gray-900">
                         {formatKm(usoDesdeMantencion)}
                       </p>
                     </div>
 
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
                       <p className="text-xs font-inter text-gray-500">
                         Pauta preventiva
                       </p>
-                      <p className="text-sm font-inter font-bold text-gray-900">
+                      v<p className="text-xs font-inter font-bold text-gray-900">
                         Cada {formatKm(ambulance.pautaPreventivaKm)}
                       </p>
                     </div>
@@ -672,13 +672,13 @@ export function FuelTab() {
                       <p className="text-xs font-inter text-gray-500">
                         Faltan para próxima mantención
                       </p>
-                      <p className="text-sm font-inter font-bold text-gray-900">
+                      <p className="text-xs font-inter font-bold text-gray-900">
                         {formatKm(kmFaltantes)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="flex items-center justify-between text-sm font-inter mb-2">
                       <span className="text-gray-600">
                         Avance preventivo por kilometraje
