@@ -8,6 +8,7 @@ import { AlertsTab } from "./components/AlertsTab"
 import { ReportsTab } from "./components/ReportsTab"
 import { LoginPage } from "./components/LoginPage"
 import { Button } from "./components/ui/button"
+import { MaintenanceTab } from "./components/MaintenanceTab"
 import { useAmbulances } from "./AmbulanceContext"
 import { useAuth, type LoggedUser } from "./AuthContext"
 import {
@@ -22,6 +23,7 @@ import {
   Users,
   X,
   MapPin,
+  Wrench,
 } from "lucide-react"
 
 type TabType =
@@ -29,9 +31,10 @@ type TabType =
   | "ambulancias"
   | "kilometraje"
   | "mapa_operativo"
+  | "mantenimientos"
   | "usuarios"
-  | "formularios"
   | "estadisticas"
+  | "formularios"
 
 interface NotificationItem {
   id: string
@@ -288,16 +291,22 @@ function DashboardApp({
       label: "Mapa operativo",
       icon: <MapPin className="w-4 h-4" />,
     },
-    { id: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
     {
-      id: "formularios",
-      label: "Formularios",
-      icon: <FileText className="w-4 h-4" />,
+      id: "mantenimientos",
+      label: "Mantenimientos",
+      icon: <Wrench className="w-4 h-4" />,
     },
+    { id: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
+
     {
       id: "estadisticas",
       label: "Estadísticas",
       icon: <BarChart3 className="w-4 h-4" />,
+    },
+        {
+      id: "formularios",
+      label: "Formularios",
+      icon: <FileText className="w-4 h-4" />,
     },
   ]
 
@@ -315,6 +324,8 @@ function DashboardApp({
         return <FleetTab />
       case "mapa_operativo":
         return <MapOperationalTab />
+      case "mantenimientos":
+        return <MaintenanceTab />
       case "kilometraje":
         return <FuelTab />
       case "usuarios":

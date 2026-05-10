@@ -94,7 +94,6 @@ export function MapOperationalTab() {
           </h1>
           <p className="text-sm font-inter text-gray-600">
             Visualización de ubicación GPS de ambulancias en la Región de Valparaíso.
-            Actualmente no se muestran datos simulados.
           </p>
         </div>
 
@@ -294,19 +293,7 @@ export function MapOperationalTab() {
         </Card>
       </div>
 
-      <Card className="p-5 border border-blue-200 bg-blue-50">
-        <div className="flex items-start gap-3">
-          <Satellite className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-inter font-bold text-blue-900">
-              Preparado para GPS real
-            </h3>
-            <p className="text-sm font-inter text-blue-800 mt-1">
-              Esta pestaña no usa coordenadas simuladas. Más adelante, el GPS de cada ambulancia podrá enviar latitud, longitud, velocidad y hora de registro hacia Supabase para visualizar la ubicación real.
-            </p>
-          </div>
-        </div>
-      </Card>
+
     </div>
   )
 }
