@@ -12,7 +12,7 @@ export interface LoggedUser {
   email: string
   role: UserRole
   status: UserStatus
-  lastAccess: string
+  lastAccess: string | null
 }
 
 interface AuthContextValue {
@@ -41,13 +41,6 @@ const mapUserFromDatabase = (user: any): LoggedUser => ({
   status: user.status,
   lastAccess: user.last_access,
 })
-
-const getCurrentAccessText = () => {
-  return `Hoy ${new Date().toLocaleTimeString("es-CL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<LoggedUser | null>(null)
@@ -114,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const newLastAccess = getCurrentAccessText()
+    const newLastAccess = new Date().toISOString()
 
     const { data: updatedUser } = await supabase
       .from("system_users")

@@ -31,7 +31,7 @@ interface SystemUser {
   role: UserRole
   status: UserStatus
   temporaryPassword: string
-  lastAccess: string
+  lastAccess: string | null
 }
 
 interface DbSystemUser {
@@ -43,7 +43,7 @@ interface DbSystemUser {
   role: UserRole
   status: UserStatus
   temporary_password: string
-  last_access: string
+  last_access: string | null
 }
 
 interface UserForm {
@@ -121,15 +121,26 @@ const mapToDatabase = (user: SystemUser) => {
     role: user.role,
     status: user.status,
     temporary_password: user.temporaryPassword.trim(),
-    last_access: user.lastAccess,
+    last_access:
+      user.lastAccess && user.lastAccess !== "Sin ingreso registrado"
+        ? user.lastAccess
+        : null,
   }
 }
 
-const getCurrentAccessText = () => {
-  return `Hoy ${new Date().toLocaleTimeString("es-CL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`
+const getCurrentAccessValue = () => new Date().toISOString()
+
+const formatLastAccess = (value: string | null) => {
+  if (!value) return "Sin ingreso registrado"
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return "Sin ingreso registrado"
+
+  return date.toLocaleString("es-CL", {
+    dateStyle: "short",
+    timeStyle: "short",
+  })
 }
 
 export function AlertsTab() {
@@ -279,7 +290,7 @@ export function AlertsTab() {
       role: form.role,
       status: form.status,
       temporaryPassword: form.temporaryPassword.trim(),
-      lastAccess: isCreating ? "Sin ingreso registrado" : getCurrentAccessText(),
+      lastAccess: isCreating ? null : getCurrentAccessValue(),
     }
   }
 
@@ -433,7 +444,7 @@ export function AlertsTab() {
     const updated: SystemUser = {
       ...user,
       temporaryPassword: newPassword,
-      lastAccess: getCurrentAccessText(),
+      lastAccess: getCurrentAccessValue(),
     }
 
     setPendingChange({
@@ -882,7 +893,7 @@ export function AlertsTab() {
                     </td>
 
                     <td className="px-4 py-3 text-gray-700">
-                      {user.lastAccess}
+                      {formatLastAccess(user.lastAccess)}
                     </td>
 
                     <td className="px-4 py-3">
