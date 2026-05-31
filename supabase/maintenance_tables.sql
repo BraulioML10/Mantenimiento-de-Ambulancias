@@ -3,6 +3,7 @@ create table if not exists public.maintenance_workshops (
   name text not null,
   contact_name text,
   contact_phone text,
+  contact_email text,
   address text,
   status text not null default 'activo',
   notes text,

@@ -35,6 +35,7 @@ interface Workshop {
   name: string
   contact_name: string | null
   contact_phone: string | null
+  contact_email: string | null
   address: string | null
   status: "activo" | "pausado" | "inactivo"
   notes: string | null
@@ -75,6 +76,7 @@ interface WorkshopForm {
   name: string
   contactName: string
   contactPhone: string
+  contactEmail: string
   address: string
   status: "activo" | "pausado" | "inactivo"
   notes: string
@@ -106,6 +108,7 @@ const emptyWorkshopForm: WorkshopForm = {
   name: "",
   contactName: "",
   contactPhone: "",
+  contactEmail: "",
   address: "",
   status: "activo",
   notes: "",
@@ -215,6 +218,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
           name,
           contact_name,
           contact_phone,
+          contact_email,
           address,
           status,
           notes
@@ -293,7 +297,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
       maintenanceType: type,
       reason:
         type === "preventiva"
-          ? "Mantencion preventiva por pauta de kilometraje"
+          ? "Mantención preventiva por pauta de kilometraje"
           : "",
       status: "programada",
     })
@@ -423,12 +427,20 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
     )
 
     if (ambulance) {
+      const shouldResetUsage = nextStatus === "finalizada"
+
       await updateAmbulance(ambulance.id, {
         ...ambulance,
         status: ambulanceStatusForMaintenance(
           record.maintenance_type,
           nextStatus
         ),
+        kilometrajeUltimaMantencion: shouldResetUsage
+          ? ambulance.kilometrajeActual
+          : ambulance.kilometrajeUltimaMantencion,
+        usoDesdeUltimaMantencion: shouldResetUsage
+          ? 0
+          : ambulance.usoDesdeUltimaMantencion,
       })
     }
 
@@ -441,12 +453,6 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
       window.alert("Solo puedes sacar de la lista mantenimientos finalizados o cancelados.")
       return
     }
-
-    const confirmed = window.confirm(
-      `¿Sacar de la lista el mantenimiento de ${record.ambulance_code}? El registro quedará guardado para estadísticas.`
-    )
-
-    if (!confirmed) return
 
     setIsSaving(true)
 
@@ -479,6 +485,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
       name: workshopForm.name.trim(),
       contact_name: workshopForm.contactName.trim() || null,
       contact_phone: workshopForm.contactPhone.trim() || null,
+      contact_email: workshopForm.contactEmail.trim().toLowerCase() || null,
       address: workshopForm.address.trim() || null,
       status: workshopForm.status,
       notes: workshopForm.notes.trim() || null,
@@ -510,6 +517,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
       name: workshop.name,
       contactName: workshop.contact_name || "",
       contactPhone: workshop.contact_phone || "",
+      contactEmail: workshop.contact_email || "",
       address: workshop.address || "",
       status: workshop.status,
       notes: workshop.notes || "",
@@ -556,7 +564,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
             onClick={() => setMaintenanceForm({ ...emptyMaintenanceForm })}
           >
             <Plus className="w-4 h-4 mr-2" />
-            Programar mantenimiento
+            Programar mantención
           </Button>
         </div>
       </div>
@@ -812,7 +820,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                       {workshop.name}
                     </p>
                     <p className="text-xs font-inter text-gray-500">
-                      {workshop.contact_phone || "Sin telefono registrado"}
+                      {workshop.contact_phone || "Sin teléfono registrado"}
                     </p>
                   </div>
 
@@ -835,6 +843,11 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                       {workshop.contact_name}
                     </Badge>
                   )}
+                  {workshop.contact_email && (
+                    <Badge className="bg-gray-100 text-gray-700 border-gray-200 font-inter">
+                      {workshop.contact_email}
+                    </Badge>
+                  )}
                 </div>
 
                 {workshop.address && (
@@ -854,7 +867,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <h2 className="text-xl font-inter font-bold text-gray-900">
-                  Programar mantenimiento
+                  Programar mantención
                 </h2>
                 <p className="text-sm font-inter text-gray-600">
                   Al guardar, el estado operativo de la ambulancia se actualiza segun el tipo de mantenimiento.
@@ -1109,13 +1122,27 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Telefono</label>
+                <label className="text-sm text-gray-600">Teléfono</label>
                 <Input
                   value={workshopForm.contactPhone}
                   onChange={(event) =>
                     setWorkshopForm({
                       ...workshopForm,
                       contactPhone: event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600">Correo</label>
+                <Input
+                  type="email"
+                  value={workshopForm.contactEmail}
+                  onChange={(event) =>
+                    setWorkshopForm({
+                      ...workshopForm,
+                      contactEmail: event.target.value,
                     })
                   }
                 />
@@ -1140,7 +1167,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Direccion</label>
+                <label className="text-sm text-gray-600">Dirección</label>
                 <Input
                   value={workshopForm.address}
                   onChange={(event) =>

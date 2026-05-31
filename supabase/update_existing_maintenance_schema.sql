@@ -4,6 +4,7 @@
 alter table public.maintenance_workshops
   add column if not exists contact_name text,
   add column if not exists contact_phone text,
+  add column if not exists contact_email text,
   add column if not exists address text,
   add column if not exists status text not null default 'activo',
   add column if not exists notes text,

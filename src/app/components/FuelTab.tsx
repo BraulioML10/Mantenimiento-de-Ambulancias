@@ -744,7 +744,7 @@ export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
                       >
                         <Wrench className="w-4 h-4 mr-2" />
                         {activeMaintenanceCodes.has(ambulance.id)
-                          ? "Mantencion programada"
+                          ? "Mantención programada"
                           : "MP"}
                       </Button>
                     </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "./ui/card"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
@@ -19,6 +19,20 @@ import {
   type AmbulanceStatus,
   type PreventiveAlertStatus,
 } from "../AmbulanceContext"
+import { supabase } from "../../lib/supabaseClient"
+
+type ActiveMaintenanceStatus = "programada" | "en_taller" | "esperando_repuesto"
+
+interface ActiveMaintenanceSummary {
+  ambulance_code: string
+  status: ActiveMaintenanceStatus
+}
+
+const activeMaintenanceLabels: Record<ActiveMaintenanceStatus, string> = {
+  programada: "Mantención programada",
+  en_taller: "Mantención en taller",
+  esperando_repuesto: "Esperando repuesto",
+}
 
 interface SimplifiedDashboardProps {
   onRequestMaintenance?: (
@@ -49,10 +63,34 @@ export function SimplifiedDashboard({
   const [alertFilter, setAlertFilter] = useState<PreventiveAlertStatus | "todos">("todos")
   const [showCriticalUnits, setShowCriticalUnits] = useState(false)
   const [selectedAmbulanceId, setSelectedAmbulanceId] = useState<string | null>(null)
+  const [activeMaintenanceByCode, setActiveMaintenanceByCode] = useState<
+    Record<string, ActiveMaintenanceSummary>
+  >({})
 
   const selectedAmbulance = ambulances.find(
     (ambulance) => ambulance.id === selectedAmbulanceId
   )
+
+  useEffect(() => {
+    const loadActiveMaintenances = async () => {
+      const { data } = await supabase
+        .from("maintenance_records")
+        .select("ambulance_code, status")
+        .in("status", ["programada", "en_taller", "esperando_repuesto"])
+        .is("archived_at", null)
+
+      const mapped = ((data || []) as ActiveMaintenanceSummary[]).reduce<
+        Record<string, ActiveMaintenanceSummary>
+      >((acc, record) => {
+        acc[record.ambulance_code] = record
+        return acc
+      }, {})
+
+      setActiveMaintenanceByCode(mapped)
+    }
+
+    loadActiveMaintenances()
+  }, [])
 
   const totalFlota = ambulances.length
 
@@ -151,6 +189,7 @@ export function SimplifiedDashboard({
   if (selectedAmbulance) {
     const estadoOperativo = getEstadoCalculado(selectedAmbulance)
     const alertaPreventiva = getAlertaPreventiva(selectedAmbulance)
+    const activeMaintenance = activeMaintenanceByCode[selectedAmbulance.id]
     const usoDesdeMantencion = getUsoDesdeMantencion(selectedAmbulance)
     const kmFaltantes = getKmFaltantes(selectedAmbulance)
     const progress = getProgressPercentage(selectedAmbulance)
@@ -186,6 +225,12 @@ export function SimplifiedDashboard({
               >
                 {preventiveAlertConfig[alertaPreventiva].label}
               </Badge>
+
+              {activeMaintenance && (
+                <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-inter">
+                  {activeMaintenanceLabels[activeMaintenance.status]}
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -283,12 +328,15 @@ export function SimplifiedDashboard({
           <div className="flex justify-end mt-6">
             <Button
               className="font-inter"
+              disabled={Boolean(activeMaintenance)}
               onClick={() =>
                 onRequestMaintenance?.(selectedAmbulance.id, "preventiva")
               }
             >
               <Wrench className="w-4 h-4 mr-2" />
-              Programar mantenimiento
+              {activeMaintenance
+                ? activeMaintenanceLabels[activeMaintenance.status]
+                : "Programar mantención"}
             </Button>
           </div>
         </Card>
@@ -570,6 +618,7 @@ export function SimplifiedDashboard({
             const estadoConfig = statusConfig[estadoOperativo]
             const alertaConfig = preventiveAlertConfig[alertaPreventiva]
             const progress = getProgressPercentage(ambulance)
+            const activeMaintenance = activeMaintenanceByCode[ambulance.id]
 
             return (
               <Card key={ambulance.id} className="p-4 border border-gray-200">
@@ -599,6 +648,12 @@ export function SimplifiedDashboard({
                     <Badge className={`${alertaConfig.badgeClass} font-inter`}>
                       {alertaConfig.shortLabel}
                     </Badge>
+
+                    {activeMaintenance && (
+                      <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-inter">
+                        {activeMaintenanceLabels[activeMaintenance.status]}
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
@@ -660,10 +715,13 @@ export function SimplifiedDashboard({
 
                 <Button
                   className="w-full mt-2 font-inter"
+                  disabled={Boolean(activeMaintenance)}
                   onClick={() => onRequestMaintenance?.(ambulance.id, "preventiva")}
                 >
                   <Wrench className="w-4 h-4 mr-2" />
-                  Mantenimiento
+                  {activeMaintenance
+                    ? activeMaintenanceLabels[activeMaintenance.status]
+                    : "Programar mantención"}
                 </Button>
               </Card>
             )
