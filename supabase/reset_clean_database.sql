@@ -193,6 +193,7 @@ create table public.maintenance_records (
   km_at_finish integer,
   status text not null default 'programada',
   notes text,
+  archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint maintenance_records_requested_role_check
@@ -275,6 +276,10 @@ create index maintenance_records_status_idx
 
 create index maintenance_records_scheduled_date_idx
   on public.maintenance_records(scheduled_date);
+
+create unique index maintenance_records_one_active_per_ambulance_idx
+  on public.maintenance_records(ambulance_code)
+  where status in ('programada', 'en_taller', 'esperando_repuesto');
 
 create index ambulance_locations_ambulance_code_idx
   on public.ambulance_locations(ambulance_code);

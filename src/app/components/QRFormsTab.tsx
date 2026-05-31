@@ -85,6 +85,23 @@ interface SavedRouteForm {
 
 const today = new Date().toISOString().slice(0, 10)
 
+const formatIntegerInput = (value: number | string) => {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : Number(String(value).replace(/\./g, "").replace(/[^\d]/g, ""))
+
+  if (!numericValue || Number.isNaN(numericValue)) return ""
+
+  return numericValue.toLocaleString("es-CL")
+}
+
+const parseIntegerInput = (value: string) => {
+  const parsed = Number(value.replace(/\./g, "").replace(/[^\d]/g, ""))
+
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
 const createEmptyDamageReport = (): DamageReport => ({
   localId: `${Date.now()}-${Math.random()}`,
   damageType: "",
@@ -236,7 +253,8 @@ const buildDocumentAnswers = () => {
 
 export function QRFormsTab() {
   const { currentUser } = useAuth()
-  const { ambulances, formatKm } = useAmbulances()
+  const { ambulances, formatKm, getEstadoCalculado, statusConfig } =
+    useAmbulances()
 
   const [savedForms, setSavedForms] = useState<SavedRouteForm[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
@@ -326,6 +344,17 @@ export function QRFormsTab() {
 
     if (!found) {
       setLookupError("No existe una ambulancia registrada con ese código móvil.")
+      return
+    }
+
+    const estadoOperativo = getEstadoCalculado(found)
+
+    if (estadoOperativo !== "operativa") {
+      setLookupError(
+        `No se puede llenar formulario para este móvil porque está ${statusConfig[
+          estadoOperativo
+        ].label.toLowerCase()}.`
+      )
       return
     }
 
@@ -997,10 +1026,14 @@ export function QRFormsTab() {
               <div>
                 <label className="text-sm text-gray-600">Kilometraje salida (obligatorio)</label>
                 <Input
-                  type="number"
-                  value={form.startKm}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(form.startKm)}
                   onChange={(event) =>
-                    setForm({ ...form, startKm: Number(event.target.value) })
+                    setForm({
+                      ...form,
+                      startKm: parseIntegerInput(event.target.value),
+                    })
                   }
                   className={requiredInputClass(Number(form.startKm) < 0)}
                 />
@@ -1009,10 +1042,14 @@ export function QRFormsTab() {
               <div>
                 <label className="text-sm text-gray-600">Kilometraje llegada (obligatorio)</label>
                 <Input
-                  type="number"
-                  value={form.endKm}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(form.endKm)}
                   onChange={(event) =>
-                    setForm({ ...form, endKm: Number(event.target.value) })
+                    setForm({
+                      ...form,
+                      endKm: parseIntegerInput(event.target.value),
+                    })
                   }
                   className={requiredInputClass(
                     Number(form.endKm) < Number(form.startKm)
@@ -1051,10 +1088,14 @@ export function QRFormsTab() {
               <div>
                 <label className="text-sm text-gray-600">Valor combustible</label>
                 <Input
-                  type="number"
-                  value={form.fuelValue}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(form.fuelValue)}
                   onChange={(event) =>
-                    setForm({ ...form, fuelValue: event.target.value })
+                    setForm({
+                      ...form,
+                      fuelValue: String(parseIntegerInput(event.target.value)),
+                    })
                   }
                 />
               </div>
@@ -1062,10 +1103,14 @@ export function QRFormsTab() {
               <div>
                 <label className="text-sm text-gray-600">Kilometraje asociado a carga</label>
                 <Input
-                  type="number"
-                  value={form.fuelKm}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(form.fuelKm)}
                   onChange={(event) =>
-                    setForm({ ...form, fuelKm: event.target.value })
+                    setForm({
+                      ...form,
+                      fuelKm: String(parseIntegerInput(event.target.value)),
+                    })
                   }
                 />
               </div>

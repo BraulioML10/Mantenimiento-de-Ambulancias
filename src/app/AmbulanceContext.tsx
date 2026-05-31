@@ -348,6 +348,23 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
   }
 
   const deleteAmbulance = async (id: string) => {
+    const relatedDeletes = [
+      supabase.from("maintenance_records").delete().eq("ambulance_code", id),
+      supabase.from("ambulance_locations").delete().eq("ambulance_code", id),
+      supabase.from("shift_route_forms").delete().eq("ambulance_code", id),
+      supabase.from("mileage_logs").delete().eq("ambulance_code", id),
+      supabase.from("notifications").delete().eq("ambulance_code", id),
+    ]
+
+    for (const deleteRequest of relatedDeletes) {
+      const { error } = await deleteRequest
+
+      if (error && error.code !== "42P01") {
+        window.alert(`No se pudo eliminar información asociada: ${error.message}`)
+        return
+      }
+    }
+
     const { error } = await supabase.from("ambulances").delete().eq("code", id)
 
     if (error) {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "./ui/card"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
@@ -20,6 +20,7 @@ import {
   type AmbulanceStatus,
   type PreventiveAlertStatus,
 } from "../AmbulanceContext"
+import { supabase } from "../../lib/supabaseClient"
 
 type SortOption =
   | "codigo"
@@ -55,10 +56,28 @@ export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
   const [alertFilter, setAlertFilter] = useState<PreventiveAlertStatus | "todos">("todos")
   const [sortOption, setSortOption] = useState<SortOption>("mayor_necesidad")
   const [selectedAmbulanceId, setSelectedAmbulanceId] = useState<string | null>(null)
+  const [activeMaintenanceCodes, setActiveMaintenanceCodes] = useState<Set<string>>(
+    new Set()
+  )
 
   const selectedAmbulance = ambulances.find(
     (ambulance) => ambulance.id === selectedAmbulanceId
   )
+
+  useEffect(() => {
+    const loadActiveMaintenances = async () => {
+      const { data } = await supabase
+        .from("maintenance_records")
+        .select("ambulance_code")
+        .in("status", ["programada", "en_taller", "esperando_repuesto"])
+
+      setActiveMaintenanceCodes(
+        new Set((data || []).map((item) => item.ambulance_code as string))
+      )
+    }
+
+    loadActiveMaintenances()
+  }, [])
 
   const totalFlota = ambulances.length
 
@@ -713,12 +732,20 @@ export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
                       <Button
                         size="sm"
                         className="font-inter"
+                        variant={
+                          activeMaintenanceCodes.has(ambulance.id)
+                            ? "outline"
+                            : "default"
+                        }
+                        disabled={activeMaintenanceCodes.has(ambulance.id)}
                         onClick={() =>
                           onRequestMaintenance?.(ambulance.id, "preventiva")
                         }
                       >
                         <Wrench className="w-4 h-4 mr-2" />
-                        MP
+                        {activeMaintenanceCodes.has(ambulance.id)
+                          ? "Mantencion programada"
+                          : "MP"}
                       </Button>
                     </div>
                   </div>

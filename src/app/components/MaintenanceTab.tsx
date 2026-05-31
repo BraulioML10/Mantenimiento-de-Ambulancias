@@ -53,6 +53,7 @@ interface MaintenanceRecord {
   estimated_cost: number | null
   status: MaintenanceStatus
   notes: string | null
+  archived_at: string | null
   created_at: string
 }
 
@@ -133,6 +134,17 @@ const formatCurrency = (value: number | null) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0))
 
+const todayDate = new Date().toISOString().slice(0, 10)
+
+const formatInteger = (value: number) =>
+  Number(value || 0).toLocaleString("es-CL")
+
+const parseIntegerInput = (value: string) => {
+  const parsed = Number(value.replace(/\./g, "").replace(/[^\d]/g, ""))
+
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
 const formatDate = (value: string | null) => {
   if (!value) return "Sin fecha"
   return new Date(`${value}T00:00:00`).toLocaleDateString("es-CL")
@@ -189,9 +201,11 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
           estimated_cost,
           status,
           notes,
+          archived_at,
           created_at
         `
-        )
+      )
+        .is("archived_at", null)
         .order("created_at", { ascending: false }),
       supabase
         .from("maintenance_workshops")
@@ -238,6 +252,16 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
     return new Set(activeRecords.map((record) => record.ambulance_code))
   }, [activeRecords])
 
+  const activeMaintenanceByCode = useMemo(() => {
+    return activeRecords.reduce<Record<string, MaintenanceRecord>>(
+      (acc, record) => {
+        acc[record.ambulance_code] = record
+        return acc
+      },
+      {}
+    )
+  }, [activeRecords])
+
   const priorityAmbulances = useMemo(() => {
     return ambulances
       .filter(
@@ -254,6 +278,15 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
     ambulance: Ambulance,
     type: MaintenanceType
   ) => {
+    const activeRecord = activeMaintenanceByCode[ambulance.id]
+
+    if (activeRecord) {
+      window.alert(
+        `${ambulance.id} ya tiene un mantenimiento activo (${statusLabels[activeRecord.status]}). Puedes ajustar ese registro en la agenda de mantenimientos.`
+      )
+      return
+    }
+
     setMaintenanceForm({
       ...emptyMaintenanceForm,
       ambulanceCode: ambulance.id,
@@ -292,6 +325,23 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
 
     if (!maintenanceForm.reason.trim()) {
       window.alert("Debes indicar el motivo del mantenimiento.")
+      return
+    }
+
+    if (
+      maintenanceForm.scheduledDate &&
+      maintenanceForm.scheduledDate < todayDate
+    ) {
+      window.alert("La fecha agendada no puede ser anterior a la fecha actual.")
+      return
+    }
+
+    const activeRecord = activeMaintenanceByCode[ambulance.id]
+
+    if (activeRecord) {
+      window.alert(
+        `${ambulance.id} ya tiene un mantenimiento activo (${statusLabels[activeRecord.status]}). Finaliza o ajusta ese registro antes de crear otro.`
+      )
       return
     }
 
@@ -383,6 +433,35 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
     }
 
     setIsSaving(false)
+    await loadData()
+  }
+
+  const archiveMaintenanceRecord = async (record: MaintenanceRecord) => {
+    if (record.status !== "finalizada" && record.status !== "cancelada") {
+      window.alert("Solo puedes sacar de la lista mantenimientos finalizados o cancelados.")
+      return
+    }
+
+    const confirmed = window.confirm(
+      `¿Sacar de la lista el mantenimiento de ${record.ambulance_code}? El registro quedará guardado para estadísticas.`
+    )
+
+    if (!confirmed) return
+
+    setIsSaving(true)
+
+    const { error: archiveError } = await supabase
+      .from("maintenance_records")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", record.id)
+
+    setIsSaving(false)
+
+    if (archiveError) {
+      window.alert(`No se pudo sacar de la lista: ${archiveError.message}`)
+      return
+    }
+
     await loadData()
   }
 
@@ -639,6 +718,19 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                               Finalizar
                             </Button>
                           )}
+
+                          {(record.status === "finalizada" ||
+                            record.status === "cancelada") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="font-inter"
+                              disabled={isSaving}
+                              onClick={() => archiveMaintenanceRecord(record)}
+                            >
+                              Sacar de lista
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -876,6 +968,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                 <label className="text-sm text-gray-600">Fecha agendada</label>
                 <Input
                   type="date"
+                  min={todayDate}
                   value={maintenanceForm.scheduledDate}
                   onChange={(event) =>
                     setMaintenanceForm({
@@ -903,12 +996,13 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
               <div>
                 <label className="text-sm text-gray-600">Dias estimados</label>
                 <Input
-                  type="number"
-                  value={maintenanceForm.estimatedDays}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatInteger(maintenanceForm.estimatedDays)}
                   onChange={(event) =>
                     setMaintenanceForm({
                       ...maintenanceForm,
-                      estimatedDays: Number(event.target.value),
+                      estimatedDays: parseIntegerInput(event.target.value),
                     })
                   }
                 />
@@ -917,12 +1011,13 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
               <div>
                 <label className="text-sm text-gray-600">Costo estimado</label>
                 <Input
-                  type="number"
-                  value={maintenanceForm.estimatedCost}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatInteger(maintenanceForm.estimatedCost)}
                   onChange={(event) =>
                     setMaintenanceForm({
                       ...maintenanceForm,
-                      estimatedCost: Number(event.target.value),
+                      estimatedCost: parseIntegerInput(event.target.value),
                     })
                   }
                 />
