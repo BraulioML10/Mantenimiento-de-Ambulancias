@@ -20,7 +20,16 @@ import {
   type PreventiveAlertStatus,
 } from "../AmbulanceContext"
 
-export function SimplifiedDashboard() {
+interface SimplifiedDashboardProps {
+  onRequestMaintenance?: (
+    ambulanceCode: string,
+    type: "preventiva" | "correctiva"
+  ) => void
+}
+
+export function SimplifiedDashboard({
+  onRequestMaintenance,
+}: SimplifiedDashboardProps) {
   const {
     ambulances,
     isLoading,
@@ -269,6 +278,18 @@ export function SimplifiedDashboard() {
                 style={{ width: `${Math.min(100, progress)}%` }}
               />
             </div>
+          </div>
+
+          <div className="flex justify-end mt-6">
+            <Button
+              className="font-inter"
+              onClick={() =>
+                onRequestMaintenance?.(selectedAmbulance.id, "preventiva")
+              }
+            >
+              <Wrench className="w-4 h-4 mr-2" />
+              Programar mantenimiento
+            </Button>
           </div>
         </Card>
       </div>
@@ -635,6 +656,14 @@ export function SimplifiedDashboard() {
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   Ver
+                </Button>
+
+                <Button
+                  className="w-full mt-2 font-inter"
+                  onClick={() => onRequestMaintenance?.(ambulance.id, "preventiva")}
+                >
+                  <Wrench className="w-4 h-4 mr-2" />
+                  Mantenimiento
                 </Button>
               </Card>
             )

@@ -79,6 +79,14 @@ interface WorkshopForm {
   notes: string
 }
 
+interface MaintenanceTabProps {
+  initialRequest?: {
+    ambulanceCode: string
+    type: MaintenanceType
+    nonce: number
+  } | null
+}
+
 const emptyMaintenanceForm: MaintenanceForm = {
   ambulanceCode: "",
   maintenanceType: "preventiva",
@@ -140,7 +148,7 @@ const ambulanceStatusForMaintenance = (
     : "mantencion_correctiva"
 }
 
-export function MaintenanceTab() {
+export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
   const { currentUser } = useAuth()
   const {
     ambulances,
@@ -222,19 +230,25 @@ export function MaintenanceTab() {
     loadData()
   }, [])
 
+  const activeRecords = records.filter(
+    (record) => record.status !== "finalizada" && record.status !== "cancelada"
+  )
+
+  const activeMaintenanceCodes = useMemo(() => {
+    return new Set(activeRecords.map((record) => record.ambulance_code))
+  }, [activeRecords])
+
   const priorityAmbulances = useMemo(() => {
     return ambulances
       .filter(
         (ambulance) =>
-          getAlertaPreventiva(ambulance) === "mantencion_preventiva_requerida" ||
-          getAlertaPreventiva(ambulance) === "proxima_mantencion"
+          !activeMaintenanceCodes.has(ambulance.id) &&
+          (getAlertaPreventiva(ambulance) ===
+            "mantencion_preventiva_requerida" ||
+            getAlertaPreventiva(ambulance) === "proxima_mantencion")
       )
       .sort((a, b) => getKmFaltantes(a) - getKmFaltantes(b))
-  }, [ambulances, getAlertaPreventiva, getKmFaltantes])
-
-  const activeRecords = records.filter(
-    (record) => record.status !== "finalizada" && record.status !== "cancelada"
-  )
+  }, [activeMaintenanceCodes, ambulances, getAlertaPreventiva, getKmFaltantes])
 
   const startMaintenanceForAmbulance = (
     ambulance: Ambulance,
@@ -251,6 +265,18 @@ export function MaintenanceTab() {
       status: "programada",
     })
   }
+
+  useEffect(() => {
+    if (!initialRequest) return
+
+    const ambulance = ambulances.find(
+      (item) => item.id === initialRequest.ambulanceCode
+    )
+
+    if (ambulance) {
+      startMaintenanceForAmbulance(ambulance, initialRequest.type)
+    }
+  }, [initialRequest?.nonce])
 
   const saveMaintenance = async () => {
     if (!maintenanceForm) return
@@ -310,6 +336,53 @@ export function MaintenanceTab() {
 
     setIsSaving(false)
     setMaintenanceForm(null)
+    await loadData()
+  }
+
+  const updateMaintenanceStatus = async (
+    record: MaintenanceRecord,
+    nextStatus: MaintenanceStatus
+  ) => {
+    setIsSaving(true)
+
+    const payload: Record<string, string | null> = {
+      status: nextStatus,
+    }
+
+    if (nextStatus === "en_taller") {
+      payload.started_at = new Date().toISOString()
+    }
+
+    if (nextStatus === "finalizada") {
+      payload.finished_at = new Date().toISOString()
+    }
+
+    const { error: updateError } = await supabase
+      .from("maintenance_records")
+      .update(payload)
+      .eq("id", record.id)
+
+    if (updateError) {
+      setIsSaving(false)
+      window.alert(`No se pudo actualizar el mantenimiento: ${updateError.message}`)
+      return
+    }
+
+    const ambulance = ambulances.find(
+      (item) => item.id === record.ambulance_code
+    )
+
+    if (ambulance) {
+      await updateAmbulance(ambulance.id, {
+        ...ambulance,
+        status: ambulanceStatusForMaintenance(
+          record.maintenance_type,
+          nextStatus
+        ),
+      })
+    }
+
+    setIsSaving(false)
     await loadData()
   }
 
@@ -500,6 +573,7 @@ export function MaintenanceTab() {
                     <th className="py-3 pr-4">Agenda</th>
                     <th className="py-3 pr-4">Estado</th>
                     <th className="py-3 pr-4">Costo</th>
+                    <th className="py-3 pr-4 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -534,6 +608,38 @@ export function MaintenanceTab() {
                       </td>
                       <td className="py-3 pr-4">
                         {formatCurrency(record.estimated_cost)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex justify-end gap-2">
+                          {record.status === "programada" && (
+                            <Button
+                              size="sm"
+                              className="font-inter"
+                              disabled={isSaving}
+                              onClick={() =>
+                                updateMaintenanceStatus(record, "en_taller")
+                              }
+                            >
+                              Confirmar llegada
+                            </Button>
+                          )}
+
+                          {(record.status === "programada" ||
+                            record.status === "en_taller" ||
+                            record.status === "esperando_repuesto") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="font-inter"
+                              disabled={isSaving}
+                              onClick={() =>
+                                updateMaintenanceStatus(record, "finalizada")
+                              }
+                            >
+                              Finalizar
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

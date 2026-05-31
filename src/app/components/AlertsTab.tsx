@@ -86,6 +86,12 @@ const statusBadgeClass: Record<UserStatus, string> = {
   Inactivo: "bg-gray-100 text-gray-700 border-gray-200",
 }
 
+const roleOrder: Record<UserRole, number> = {
+  Administrador: 1,
+  Coordinador: 2,
+  Chofer: 3,
+}
+
 const userSelect = `
   id,
   user_code,
@@ -116,7 +122,7 @@ const mapToDatabase = (user: SystemUser) => {
   return {
     user_code: user.userCode,
     name: user.name.trim(),
-    username: user.username.trim().toLowerCase(),
+    username: user.username.trim(),
     email: cleanEmail || null,
     role: user.role,
     status: user.status,
@@ -213,7 +219,8 @@ export function AlertsTab() {
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase().trim()
 
-    return users.filter((user) => {
+    return users
+      .filter((user) => {
       const emailText = user.email || "sin correo registrado"
 
       const matchesSearch =
@@ -229,8 +236,15 @@ export function AlertsTab() {
       const matchesStatus =
         statusFilter === "todos" || user.status === statusFilter
 
-      return matchesSearch && matchesRole && matchesStatus
-    })
+        return matchesSearch && matchesRole && matchesStatus
+      })
+      .sort((a, b) => {
+        const roleDifference = roleOrder[a.role] - roleOrder[b.role]
+
+        if (roleDifference !== 0) return roleDifference
+
+        return a.name.localeCompare(b.name, "es-CL", { sensitivity: "base" })
+      })
   }, [users, searchTerm, roleFilter, statusFilter])
 
   const generateUserCode = () => {
@@ -244,7 +258,7 @@ export function AlertsTab() {
   }
 
   const buildPasswordFromUsername = (username: string) => {
-    return `${username.trim().toLowerCase()}123`
+    return `${username.trim()}123`
   }
 
   const iniciarCreacion = () => {
@@ -285,7 +299,7 @@ export function AlertsTab() {
       id: isCreating ? "" : form.originalId,
       userCode: form.userCode,
       name: form.name.trim(),
-      username: form.username.trim().toLowerCase(),
+      username: form.username.trim(),
       email: form.email.trim().toLowerCase(),
       role: form.role,
       status: form.status,
@@ -619,7 +633,7 @@ export function AlertsTab() {
 
     setEditingForm({
       ...editingForm,
-      username: value.trim().toLowerCase(),
+      username: value.trim(),
     })
   }
 

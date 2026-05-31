@@ -48,6 +48,13 @@ interface PendingAmbulanceChange {
   changes: string[]
 }
 
+interface FleetTabProps {
+  onRequestMaintenance?: (
+    ambulanceCode: string,
+    type: "preventiva" | "correctiva"
+  ) => void
+}
+
 const emptyForm: AmbulanceForm = {
   originalId: "",
   id: "",
@@ -60,7 +67,7 @@ const emptyForm: AmbulanceForm = {
   pautaPreventivaKm: 10000,
 }
 
-export function FleetTab() {
+export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
   const {
     ambulances,
     addAmbulance,
@@ -849,6 +856,17 @@ export function FleetTab() {
                             onClick={() => iniciarEdicion(ambulance)}
                           >
                             <Edit className="w-4 h-4" />
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-inter"
+                            onClick={() =>
+                              onRequestMaintenance?.(ambulance.id, "preventiva")
+                            }
+                          >
+                            <Wrench className="w-4 h-4" />
                           </Button>
 
                           <Button

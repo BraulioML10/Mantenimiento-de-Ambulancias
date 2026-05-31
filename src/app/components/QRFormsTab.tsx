@@ -252,6 +252,7 @@ export function QRFormsTab() {
   const [inspectionAnswers, setInspectionAnswers] = useState(buildInspectionAnswers)
   const [documentAnswers, setDocumentAnswers] = useState(buildDocumentAnswers)
   const [selectedSavedForm, setSelectedSavedForm] = useState<SavedRouteForm | null>(null)
+  const [hasTriedSubmit, setHasTriedSubmit] = useState(false)
 
   const totalKm = Math.max(0, Number(form.endKm) - Number(form.startKm))
 
@@ -307,6 +308,7 @@ export function QRFormsTab() {
     setForm(emptyRouteForm)
     setInspectionAnswers(buildInspectionAnswers())
     setDocumentAnswers(buildDocumentAnswers())
+    setHasTriedSubmit(false)
   }
 
   const buscarAmbulancia = () => {
@@ -441,7 +443,7 @@ export function QRFormsTab() {
       )
     })
 
-    if (missingObservation) {
+    if (false && missingObservation) {
       return `Debes agregar observación en el ítem: ${missingObservation.item}`
     }
 
@@ -477,6 +479,8 @@ export function QRFormsTab() {
 
   const guardarFormulario = async () => {
     if (!currentUser || !selectedAmbulance) return
+
+    setHasTriedSubmit(true)
 
     const validationError = validateForm()
 
@@ -564,6 +568,25 @@ export function QRFormsTab() {
     resetCreation()
     loadSavedForms()
   }
+
+  const requiredInputClass = (isMissing: boolean) =>
+    hasTriedSubmit && isMissing
+      ? "border-red-400 bg-red-50 focus-visible:ring-red-200"
+      : ""
+
+  const requiredSelectClass = (isMissing: boolean, extraClass = "") =>
+    `${extraClass} h-10 rounded-md border bg-white px-3 text-sm ${
+      hasTriedSubmit && isMissing
+        ? "border-red-400 bg-red-50"
+        : "border-gray-300"
+    }`
+
+  const missingText = (isMissing: boolean) =>
+    hasTriedSubmit && isMissing ? (
+      <p className="text-xs font-inter text-red-600 mt-1">
+        Campo obligatorio pendiente.
+      </p>
+    ) : null
 
   if (!isCreating) {
     return (
@@ -905,13 +928,13 @@ export function QRFormsTab() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Turno obligatorio</label>
+                <label className="text-sm text-gray-600">Turno (obligatorio)</label>
                 <select
                   value={form.shiftType}
                   onChange={(event) =>
                     setForm({ ...form, shiftType: event.target.value as ShiftType })
                   }
-                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                  className={requiredSelectClass(!form.shiftType, "w-full")}
                 >
                   <option value="Turno 08:00 a 20:00 horas">
                     Turno 08:00 a 20:00 horas
@@ -924,14 +947,16 @@ export function QRFormsTab() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Fecha obligatoria</label>
+                <label className="text-sm text-gray-600">Fecha (obligatorio)</label>
                 <Input
                   type="date"
                   value={form.formDate}
                   onChange={(event) =>
                     setForm({ ...form, formDate: event.target.value })
                   }
+                  className={requiredInputClass(!form.formDate)}
                 />
+                {missingText(!form.formDate)}
               </div>
 
               <div>
@@ -957,36 +982,43 @@ export function QRFormsTab() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Motivo y destino obligatorio</label>
+                <label className="text-sm text-gray-600">Motivo y destino (obligatorio)</label>
                 <Input
                   value={form.destinationReason}
                   onChange={(event) =>
                     setForm({ ...form, destinationReason: event.target.value })
                   }
                   placeholder="Ej: traslado, retorno a base, procedimiento..."
+                  className={requiredInputClass(!form.destinationReason.trim())}
                 />
+                {missingText(!form.destinationReason.trim())}
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Kilometraje salida</label>
+                <label className="text-sm text-gray-600">Kilometraje salida (obligatorio)</label>
                 <Input
                   type="number"
                   value={form.startKm}
                   onChange={(event) =>
                     setForm({ ...form, startKm: Number(event.target.value) })
                   }
+                  className={requiredInputClass(Number(form.startKm) < 0)}
                 />
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Kilometraje llegada</label>
+                <label className="text-sm text-gray-600">Kilometraje llegada (obligatorio)</label>
                 <Input
                   type="number"
                   value={form.endKm}
                   onChange={(event) =>
                     setForm({ ...form, endKm: Number(event.target.value) })
                   }
+                  className={requiredInputClass(
+                    Number(form.endKm) < Number(form.startKm)
+                  )}
                 />
+                {missingText(Number(form.endKm) < Number(form.startKm))}
               </div>
 
               <div>
@@ -1039,13 +1071,13 @@ export function QRFormsTab() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Nivel de combustible obligatorio</label>
+                <label className="text-sm text-gray-600">Nivel de combustible (obligatorio)</label>
                 <select
                   value={form.fuelLevel}
                   onChange={(event) =>
                     setForm({ ...form, fuelLevel: event.target.value })
                   }
-                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                  className={requiredSelectClass(!form.fuelLevel, "w-full")}
                 >
                   <option value="">Seleccionar</option>
                   <option value="1/4">1/4</option>
@@ -1053,21 +1085,23 @@ export function QRFormsTab() {
                   <option value="3/4">3/4</option>
                   <option value="Lleno">Lleno</option>
                 </select>
+                {missingText(!form.fuelLevel)}
               </div>
 
               <div>
-                <label className="text-sm text-gray-600">Manómetro obligatorio</label>
+                <label className="text-sm text-gray-600">Manómetro (obligatorio)</label>
                 <select
                   value={form.manometer}
                   onChange={(event) =>
                     setForm({ ...form, manometer: event.target.value as DocumentStatus })
                   }
-                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                  className={requiredSelectClass(!form.manometer, "w-full")}
                 >
                   <option value="">Seleccionar</option>
                   <option value="Sí">Sí</option>
                   <option value="No">No</option>
                 </select>
+                {missingText(!form.manometer)}
               </div>
 
               <div className="md:col-span-3">
@@ -1101,8 +1135,7 @@ export function QRFormsTab() {
             </div>
 
             <p className="text-sm font-inter text-gray-600 mb-4">
-              Todos los ítems deben quedar respondidos. Si marcas “Malo” o “No aplica”,
-              debes agregar una observación.
+              Todos los ítems deben quedar respondidos. La observación queda disponible para detallar novedades cuando corresponda.
             </p>
 
             <div className="space-y-6">
@@ -1119,7 +1152,11 @@ export function QRFormsTab() {
                       return (
                         <div
                           key={item.item}
-                          className="grid grid-cols-1 lg:grid-cols-[1.4fr_180px_1fr] gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
+                          className={`grid grid-cols-1 lg:grid-cols-[1.4fr_180px_1fr] gap-3 rounded-lg border p-3 ${
+                            hasTriedSubmit && !answer.status
+                              ? "border-red-300 bg-red-50"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
                         >
                           <p className="text-sm font-inter text-gray-800">
                             {item.item}
@@ -1134,7 +1171,10 @@ export function QRFormsTab() {
                                 event.target.value
                               )
                             }
-                            className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm font-inter"
+                            className={requiredSelectClass(
+                              !answer.status,
+                              "font-inter"
+                            )}
                           >
                             <option value="">Seleccionar</option>
                             <option value="Bueno">Bueno</option>
@@ -1178,7 +1218,11 @@ export function QRFormsTab() {
                 return (
                   <div
                     key={item}
-                    className="grid grid-cols-1 lg:grid-cols-[1fr_180px_1fr] gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
+                    className={`grid grid-cols-1 lg:grid-cols-[1fr_180px_1fr] gap-3 rounded-lg border p-3 ${
+                      hasTriedSubmit && !answer.status
+                        ? "border-red-300 bg-red-50"
+                        : "border-gray-200 bg-gray-50"
+                    }`}
                   >
                     <p className="text-sm font-inter text-gray-800">{item}</p>
 
@@ -1191,7 +1235,7 @@ export function QRFormsTab() {
                           event.target.value
                         )
                       }
-                      className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm font-inter"
+                      className={requiredSelectClass(!answer.status, "font-inter")}
                     >
                       <option value="">Seleccionar</option>
                       <option value="Sí">Sí</option>
@@ -1255,7 +1299,14 @@ export function QRFormsTab() {
                   return (
                     <div
                       key={damage.localId}
-                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                      className={`rounded-xl border p-4 ${
+                        hasTriedSubmit &&
+                        (!damage.damageType ||
+                          !damage.affectedArea ||
+                          !damage.description.trim())
+                          ? "border-red-300 bg-red-50"
+                          : "border-gray-200 bg-gray-50"
+                      }`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                         <div className="flex items-center gap-2">
@@ -1297,7 +1348,10 @@ export function QRFormsTab() {
                                 event.target.value
                               )
                             }
-                            className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                            className={requiredSelectClass(
+                              !damage.damageType,
+                              "w-full"
+                            )}
                           >
                             <option value="">Seleccionar</option>
                             {damageTypeOptions.map((option) => (
@@ -1321,7 +1375,10 @@ export function QRFormsTab() {
                                 event.target.value
                               )
                             }
-                            className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                            className={requiredSelectClass(
+                              !damage.affectedArea,
+                              "w-full"
+                            )}
                           >
                             <option value="">Seleccionar</option>
                             {affectedAreaOptions.map((area) => (
@@ -1346,6 +1403,9 @@ export function QRFormsTab() {
                               )
                             }
                             placeholder="Detalle del daño"
+                            className={requiredInputClass(
+                              !damage.description.trim()
+                            )}
                           />
                         </div>
                       </div>

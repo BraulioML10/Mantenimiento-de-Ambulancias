@@ -47,6 +47,12 @@ interface NotificationItem {
   read: boolean
 }
 
+interface MaintenanceRequest {
+  ambulanceCode: string
+  type: "preventiva" | "correctiva"
+  nonce: number
+}
+
 export default function App() {
   const { currentUser, isLoading, logout } = useAuth()
 
@@ -80,6 +86,8 @@ function DashboardApp({
   const [activeTab, setActiveTab] = useState<TabType>(() =>
     isDriver ? "formularios" : "inicio"
   )
+  const [maintenanceRequest, setMaintenanceRequest] =
+    useState<MaintenanceRequest | null>(null)
 
   const [isProfileOpen, setIsProfileOpen] = useState(false)
 
@@ -314,6 +322,18 @@ function DashboardApp({
     ? allTabs.filter((tab) => tab.id === "formularios")
     : allTabs
 
+  const openMaintenanceRequest = (
+    ambulanceCode: string,
+    type: "preventiva" | "correctiva" = "preventiva"
+  ) => {
+    setMaintenanceRequest({
+      ambulanceCode,
+      type,
+      nonce: Date.now(),
+    })
+    setActiveTab("mantenimientos")
+  }
+
   const renderContent = () => {
     if (isDriver) {
       return <QRFormsTab />
@@ -321,13 +341,13 @@ function DashboardApp({
 
     switch (activeTab) {
       case "ambulancias":
-        return <FleetTab />
+        return <FleetTab onRequestMaintenance={openMaintenanceRequest} />
       case "mapa_operativo":
         return <MapOperationalTab />
       case "mantenimientos":
-        return <MaintenanceTab />
+        return <MaintenanceTab initialRequest={maintenanceRequest} />
       case "kilometraje":
-        return <FuelTab />
+        return <FuelTab onRequestMaintenance={openMaintenanceRequest} />
       case "usuarios":
         return <AlertsTab />
       case "formularios":
@@ -335,7 +355,9 @@ function DashboardApp({
       case "estadisticas":
         return <ReportsTab />
       default:
-        return <SimplifiedDashboard />
+        return (
+          <SimplifiedDashboard onRequestMaintenance={openMaintenanceRequest} />
+        )
     }
   }
 

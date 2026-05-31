@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     rememberSession: boolean
   ) => {
-    const cleanUsername = username.trim().toLowerCase()
+    const cleanUsername = username.trim()
     const cleanPassword = password.trim()
 
     if (!cleanUsername || !cleanPassword) {
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("system_users")
       .select("*")
-      .eq("username", cleanUsername)
+      .ilike("username", cleanUsername)
       .single()
 
     if (error || !data) {

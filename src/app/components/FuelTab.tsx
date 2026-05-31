@@ -11,6 +11,7 @@ import {
   Gauge,
   Search,
   TrendingUp,
+  Wrench,
   X,
 } from "lucide-react"
 import {
@@ -27,7 +28,14 @@ type SortOption =
   | "menor_necesidad"
   | "mayor_km_total"
 
-export function FuelTab() {
+interface FuelTabProps {
+  onRequestMaintenance?: (
+    ambulanceCode: string,
+    type: "preventiva" | "correctiva"
+  ) => void
+}
+
+export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
   const {
     ambulances,
     isLoading,
@@ -700,6 +708,17 @@ export function FuelTab() {
                       >
                         <Eye className="w-4 h-4 mr-2" />
                         Ver
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        className="font-inter"
+                        onClick={() =>
+                          onRequestMaintenance?.(ambulance.id, "preventiva")
+                        }
+                      >
+                        <Wrench className="w-4 h-4 mr-2" />
+                        MP
                       </Button>
                     </div>
                   </div>
