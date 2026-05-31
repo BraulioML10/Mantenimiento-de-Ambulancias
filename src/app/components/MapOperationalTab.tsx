@@ -194,13 +194,9 @@ export function MapOperationalTab() {
                   Región de Valparaíso
                 </h2>
                 <p className="text-sm font-inter text-gray-600">
-                  Vista base del mapa operativo. Las ambulancias aparecerán cuando exista ubicación GPS registrada.
+                  Vista base del mapa operativo para unidades con ubicación GPS registrada.
                 </p>
               </div>
-
-              <Badge className="bg-gray-100 text-gray-700 border-gray-200 font-inter">
-                Sin simulación
-              </Badge>
             </div>
           </div>
 
@@ -223,7 +219,7 @@ export function MapOperationalTab() {
                   </h3>
 
                   <p className="text-sm font-inter text-gray-600 mt-2">
-                    Cuando una ambulancia envíe coordenadas reales, aparecerá en este mapa operativo.
+                    Las unidades aparecerán en el mapa cuando existan coordenadas registradas.
                   </p>
                 </div>
               </div>
@@ -249,7 +245,7 @@ export function MapOperationalTab() {
                 No hay móviles con ubicación GPS.
               </p>
               <p className="text-sm font-inter text-gray-500 mt-1">
-                Esta sección quedará disponible cuando exista integración con GPS o con una fuente real de coordenadas.
+                Sin ubicaciones GPS registradas para mostrar.
               </p>
             </div>
           ) : (
