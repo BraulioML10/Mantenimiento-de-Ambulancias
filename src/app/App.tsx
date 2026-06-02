@@ -345,7 +345,12 @@ function DashboardApp({
       case "mapa_operativo":
         return <MapOperationalTab />
       case "mantenimientos":
-        return <MaintenanceTab initialRequest={maintenanceRequest} />
+        return (
+          <MaintenanceTab
+            initialRequest={maintenanceRequest}
+            onRequestConsumed={() => setMaintenanceRequest(null)}
+          />
+        )
       case "kilometraje":
         return <FuelTab onRequestMaintenance={openMaintenanceRequest} />
       case "usuarios":
@@ -356,7 +361,10 @@ function DashboardApp({
         return <ReportsTab />
       default:
         return (
-          <SimplifiedDashboard onRequestMaintenance={openMaintenanceRequest} />
+          <SimplifiedDashboard
+            onRequestMaintenance={openMaintenanceRequest}
+            onNavigate={(tab) => setActiveTab(tab)}
+          />
         )
     }
   }

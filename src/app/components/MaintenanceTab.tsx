@@ -88,6 +88,7 @@ interface MaintenanceTabProps {
     type: MaintenanceType
     nonce: number
   } | null
+  onRequestConsumed?: () => void
 }
 
 const emptyMaintenanceForm: MaintenanceForm = {
@@ -163,7 +164,10 @@ const ambulanceStatusForMaintenance = (
     : "mantencion_correctiva"
 }
 
-export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
+export function MaintenanceTab({
+  initialRequest,
+  onRequestConsumed,
+}: MaintenanceTabProps) {
   const { currentUser } = useAuth()
   const canManageMaintenance = currentUser?.role === "Administrador"
   const {
@@ -313,8 +317,9 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
 
     if (ambulance) {
       startMaintenanceForAmbulance(ambulance, initialRequest.type)
+      onRequestConsumed?.()
     }
-  }, [canManageMaintenance, initialRequest?.nonce])
+  }, [canManageMaintenance, initialRequest?.nonce, onRequestConsumed])
 
   const saveMaintenance = async () => {
     if (!maintenanceForm) return
