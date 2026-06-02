@@ -147,8 +147,19 @@ function typeLabel(type: MaintenanceRequestType) {
   return type === "preventiva" ? "Preventiva" : "Correctiva";
 }
 
+function ambulanceStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    operativa: "Operativa",
+    proxima_mantencion: "Próxima a mantención",
+    mantencion_preventiva: "Mantención preventiva",
+    mantencion_correctiva: "Mantención correctiva",
+    fuera_servicio: "Fuera de servicio"
+  };
+  return labels[status] ?? "Sin estado";
+}
+
 export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: SimplifiedDashboardProps) {
-  const { ambulances, getMaintenanceStats } = useAmbulances();
+  const { ambulances, getAlertaPreventiva, getUsoDesdeMantencion } = useAmbulances();
   const { currentUser } = useAuth();
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceSummary[]>([]);
@@ -197,8 +208,6 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
     loadPanelData();
   }, []);
 
-  const maintenanceStats = useMemo(() => getMaintenanceStats(), [getMaintenanceStats, ambulances]);
-
   const activeMaintenanceByCode = useMemo(() => {
     const map = new Map<string, MaintenanceSummary>();
     maintenances
@@ -208,6 +217,22 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
       });
     return map;
   }, [maintenances]);
+
+  const maintenanceStats = useMemo(() => {
+    const inMaintenanceCodes = new Set(activeMaintenanceByCode.keys());
+    ambulances.forEach((ambulance) => {
+      if (ambulance.status === "mantencion_preventiva" || ambulance.status === "mantencion_correctiva") {
+        inMaintenanceCodes.add(ambulance.id);
+      }
+    });
+
+    return {
+      operational: ambulances.filter((ambulance) => ambulance.status === "operativa" && !inMaintenanceCodes.has(ambulance.id)).length,
+      inMaintenance: inMaintenanceCodes.size,
+      outOfService: ambulances.filter((ambulance) => ambulance.status === "fuera_servicio").length,
+      upcomingMaintenance: ambulances.filter((ambulance) => getAlertaPreventiva(ambulance) === "proxima_mantencion").length
+    };
+  }, [activeMaintenanceByCode, ambulances, getAlertaPreventiva]);
 
   const maintenanceCountByCode = useMemo(() => {
     const map = new Map<string, { total: number; preventiva: number; correctiva: number }>();
@@ -253,9 +278,10 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
   const criticalUnits = useMemo(() => {
     return ambulances
       .map((ambulance) => {
-        const activeMaintenance = activeMaintenanceByCode.get(ambulance.code);
-        const pendingDamageCount = pendingDamages.filter((damage) => damage.ambulanceCode === ambulance.code).length;
-        const counters = maintenanceCountByCode.get(ambulance.code) ?? { total: 0, preventiva: 0, correctiva: 0 };
+        const activeMaintenance = activeMaintenanceByCode.get(ambulance.id);
+        const pendingDamageCount = pendingDamages.filter((damage) => damage.ambulanceCode === ambulance.id).length;
+        const counters = maintenanceCountByCode.get(ambulance.id) ?? { total: 0, preventiva: 0, correctiva: 0 };
+        const preventiveAlert = getAlertaPreventiva(ambulance);
         const reasons: string[] = [];
 
         if (activeMaintenance) {
@@ -264,8 +290,8 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
         if (ambulance.status === "mantencion_preventiva") reasons.push("Mantención preventiva");
         if (ambulance.status === "mantencion_correctiva") reasons.push("Mantención correctiva");
         if (ambulance.status === "fuera_servicio") reasons.push("Fuera de servicio");
-        if (ambulance.alertLevel === "required") reasons.push("Supera pauta preventiva");
-        if (ambulance.alertLevel === "upcoming") reasons.push("Próxima a mantención");
+        if (preventiveAlert === "mantencion_preventiva_requerida") reasons.push("Supera pauta preventiva");
+        if (preventiveAlert === "proxima_mantencion") reasons.push("Próxima a mantención");
         if (pendingDamageCount > 0) reasons.push(`${pendingDamageCount} daño${pendingDamageCount === 1 ? "" : "s"} pendiente${pendingDamageCount === 1 ? "" : "s"}`);
 
         return {
@@ -278,12 +304,12 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
       })
       .filter((item) => item.reasons.length > 0)
       .sort((a, b) => {
-        const priorityA = a.ambulance.alertLevel === "required" ? 0 : a.activeMaintenance ? 1 : 2;
-        const priorityB = b.ambulance.alertLevel === "required" ? 0 : b.activeMaintenance ? 1 : 2;
+        const priorityA = getAlertaPreventiva(a.ambulance) === "mantencion_preventiva_requerida" ? 0 : a.activeMaintenance ? 1 : 2;
+        const priorityB = getAlertaPreventiva(b.ambulance) === "mantencion_preventiva_requerida" ? 0 : b.activeMaintenance ? 1 : 2;
         return priorityA - priorityB || b.pendingDamageCount - a.pendingDamageCount;
       })
       .slice(0, 6);
-  }, [activeMaintenanceByCode, ambulances, maintenanceCountByCode, pendingDamages]);
+  }, [activeMaintenanceByCode, ambulances, getAlertaPreventiva, maintenanceCountByCode, pendingDamages]);
 
   const recentActivity = useMemo<ActivityItem[]>(() => {
     const formActivity: ActivityItem[] = forms.slice(0, 12).map((form) => {
@@ -500,16 +526,16 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-slate-950">{ambulance.code}</h3>
+                          <h3 className="font-semibold text-slate-950">{ambulance.id}</h3>
                           <Badge variant="outline" className={getStatusBadge(activeMaintenance ? activeMaintenance.status : ambulance.status)}>
-                            {activeMaintenance ? maintenanceLabel(activeMaintenance.status) : ambulance.statusLabel}
+                            {activeMaintenance ? maintenanceLabel(activeMaintenance.status) : ambulanceStatusLabel(ambulance.status)}
                           </Badge>
-                          <span className="text-xs text-slate-500">{ambulance.patent}</span>
+                          <span className="text-xs text-slate-500">{ambulance.patente}</span>
                         </div>
                         <p className="mt-2 text-sm text-slate-700">{reasons.join(" · ")}</p>
                         <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
-                          <span>Km total: {formatKm(ambulance.totalMileage)}</span>
-                          <span>Uso mantención: {formatKm(ambulance.maintenanceUsage)}</span>
+                          <span>Km total: {formatKm(ambulance.kilometrajeActual)}</span>
+                          <span>Uso mantención: {formatKm(getUsoDesdeMantencion(ambulance))}</span>
                           <span>
                             Historial: {counters.total} ({counters.preventiva} P / {counters.correctiva} C)
                           </span>
