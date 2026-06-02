@@ -538,6 +538,38 @@ create table if not exists public.maintenance_budgets (
     unique (budget_year, budget_month, budget_type)
 );
 
+alter table public.maintenance_budgets
+  add column if not exists year integer,
+  add column if not exists month integer,
+  add column if not exists initial_budget numeric(14, 0) not null default 0,
+  add column if not exists preventive_budget numeric(14, 0) not null default 0,
+  add column if not exists corrective_budget numeric(14, 0) not null default 0,
+  add column if not exists total_budget numeric(14, 0) not null default 0,
+  add column if not exists notes text,
+  add column if not exists created_by_user_id uuid references public.system_users(id) on update cascade,
+  add column if not exists created_by_name text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
+update public.maintenance_budgets
+set
+  year = coalesce(year, budget_year),
+  month = coalesce(month, budget_month),
+  initial_budget = coalesce(nullif(initial_budget, 0), total_amount, total_budget, 0),
+  total_budget = coalesce(nullif(total_budget, 0), total_amount, initial_budget, 0),
+  total_amount = coalesce(nullif(total_amount, 0), total_budget, initial_budget, 0),
+  budget_year = coalesce(budget_year, year),
+  budget_month = coalesce(budget_month, month),
+  updated_at = now()
+where year is null
+   or month is distinct from budget_month
+   or total_budget = 0
+   or total_amount = 0;
+
+create unique index if not exists maintenance_budgets_year_month_uidx
+  on public.maintenance_budgets(year, month)
+  where is_active = true;
+
 create table if not exists public.budget_movements (
   id uuid primary key default gen_random_uuid(),
   budget_id uuid references public.maintenance_budgets(id) on delete set null,
@@ -551,11 +583,35 @@ create table if not exists public.budget_movements (
   created_at timestamptz not null default now()
 );
 
+alter table public.budget_movements
+  add column if not exists year integer,
+  add column if not exists month integer,
+  add column if not exists reason text,
+  add column if not exists status text not null default 'activo',
+  add column if not exists cancelled_at timestamptz,
+  add column if not exists cancelled_by_user_id uuid references public.system_users(id) on update cascade,
+  add column if not exists cancelled_by_name text,
+  add column if not exists cancellation_reason text;
+
+update public.budget_movements
+set
+  year = coalesce(year, extract(year from movement_date)::integer),
+  month = coalesce(month, extract(month from movement_date)::integer),
+  reason = coalesce(reason, description),
+  status = coalesce(status, 'activo')
+where year is null
+   or month is null
+   or reason is null
+   or status is null;
+
 create index if not exists ambulance_notes_ambulance_code_idx
   on public.ambulance_notes(ambulance_code, created_at desc);
 
 create index if not exists budget_movements_budget_id_idx
   on public.budget_movements(budget_id, movement_date desc);
+
+create index if not exists budget_movements_year_month_idx
+  on public.budget_movements(year, month, status);
 
 create index if not exists budget_movements_maintenance_record_id_idx
   on public.budget_movements(maintenance_record_id);
@@ -655,6 +711,7 @@ drop policy if exists app_update_maintenance_budgets on public.maintenance_budge
 drop policy if exists app_select_budget_movements on public.budget_movements;
 drop policy if exists app_insert_budget_movements on public.budget_movements;
 drop policy if exists app_update_budget_movements on public.budget_movements;
+drop policy if exists app_delete_budget_movements on public.budget_movements;
 
 drop policy if exists app_select_ambulance_locations on public.ambulance_locations;
 drop policy if exists app_insert_ambulance_locations on public.ambulance_locations;
@@ -752,6 +809,8 @@ create policy app_insert_budget_movements on public.budget_movements
   for insert to anon with check (true);
 create policy app_update_budget_movements on public.budget_movements
   for update to anon using (true) with check (true);
+create policy app_delete_budget_movements on public.budget_movements
+  for delete to anon using (true);
 
 create policy app_select_ambulance_locations on public.ambulance_locations
   for select to anon using (true);
@@ -763,4 +822,5 @@ create policy app_update_ambulance_locations on public.ambulance_locations
 grant usage on schema public to anon;
 grant select, insert, update on all tables in schema public to anon;
 grant delete on public.system_users to anon;
+grant delete on public.budget_movements to anon;
 grant usage, select on all sequences in schema public to anon;

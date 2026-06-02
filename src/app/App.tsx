@@ -320,7 +320,7 @@ function DashboardApp({
 
   const tabs = isDriver
     ? allTabs.filter((tab) => tab.id === "formularios")
-    : allTabs
+    : allTabs.filter((tab) => userRole === "Administrador" || tab.id !== "usuarios")
 
   const openMaintenanceRequest = (
     ambulanceCode: string,

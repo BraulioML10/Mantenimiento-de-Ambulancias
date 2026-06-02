@@ -22,6 +22,7 @@ import {
   type AmbulanceStatus,
   type PreventiveAlertStatus,
 } from "../AmbulanceContext"
+import { useAuth } from "../AuthContext"
 type SortOption =
   | "codigo"
   | "estado"
@@ -85,6 +86,8 @@ const parseIntegerInput = (value: string) => {
 }
 
 export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
+  const { currentUser } = useAuth()
+  const canManageFleet = currentUser?.role === "Administrador"
   const {
     ambulances,
     addAmbulance,
@@ -578,10 +581,12 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
             Exportar CSV
           </Button>
 
-          <Button className="font-inter" onClick={iniciarCreacion}>
-            <Plus className="w-4 h-4 mr-2" />
-            Agregar ambulancia
-          </Button>
+          {canManageFleet && (
+            <Button className="font-inter" onClick={iniciarCreacion}>
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar ambulancia
+            </Button>
+          )}
         </div>
       </div>
 
@@ -866,14 +871,16 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                             <Eye className="w-4 h-4" />
                           </Button>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="font-inter"
-                            onClick={() => iniciarEdicion(ambulance)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          {canManageFleet && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="font-inter"
+                              onClick={() => iniciarEdicion(ambulance)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
 
                           <Button
                             variant="outline"
@@ -886,14 +893,16 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                             <Wrench className="w-4 h-4" />
                           </Button>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="font-inter text-red-600 hover:text-red-700"
-                            onClick={() => setDeleteTarget(ambulance)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {canManageFleet && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="font-inter text-red-600 hover:text-red-700"
+                              onClick={() => setDeleteTarget(ambulance)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1053,10 +1062,12 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                 Cerrar
               </Button>
 
-              <Button className="font-inter" onClick={() => iniciarEdicion(selectedAmbulance)}>
-                <Edit className="w-4 h-4 mr-2" />
-                Editar características
-              </Button>
+              {canManageFleet && (
+                <Button className="font-inter" onClick={() => iniciarEdicion(selectedAmbulance)}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar características
+                </Button>
+              )}
             </div>
           </Card>
         </div>

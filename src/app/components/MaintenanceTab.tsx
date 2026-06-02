@@ -165,6 +165,7 @@ const ambulanceStatusForMaintenance = (
 
 export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
   const { currentUser } = useAuth()
+  const canManageMaintenance = currentUser?.role === "Administrador"
   const {
     ambulances,
     updateAmbulance,
@@ -304,7 +305,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
   }
 
   useEffect(() => {
-    if (!initialRequest) return
+    if (!initialRequest || !canManageMaintenance) return
 
     const ambulance = ambulances.find(
       (item) => item.id === initialRequest.ambulanceCode
@@ -313,7 +314,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
     if (ambulance) {
       startMaintenanceForAmbulance(ambulance, initialRequest.type)
     }
-  }, [initialRequest?.nonce])
+  }, [canManageMaintenance, initialRequest?.nonce])
 
   const saveMaintenance = async () => {
     if (!maintenanceForm) return
@@ -550,6 +551,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
           <Button
             variant="outline"
             className="font-inter"
+            disabled={!canManageMaintenance}
             onClick={() => {
               setEditingWorkshopId(null)
               setWorkshopForm({ ...emptyWorkshopForm })
@@ -561,6 +563,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
 
           <Button
             className="font-inter"
+            disabled={!canManageMaintenance}
             onClick={() => setMaintenanceForm({ ...emptyMaintenanceForm })}
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -702,7 +705,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                             <Button
                               size="sm"
                               className="font-inter"
-                              disabled={isSaving}
+                              disabled={isSaving || !canManageMaintenance}
                               onClick={() =>
                                 updateMaintenanceStatus(record, "en_taller")
                               }
@@ -718,7 +721,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                               variant="outline"
                               size="sm"
                               className="font-inter"
-                              disabled={isSaving}
+                              disabled={isSaving || !canManageMaintenance}
                               onClick={() =>
                                 updateMaintenanceStatus(record, "finalizada")
                               }
@@ -733,7 +736,7 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                               variant="outline"
                               size="sm"
                               className="font-inter"
-                              disabled={isSaving}
+                              disabled={isSaving || !canManageMaintenance}
                               onClick={() => archiveMaintenanceRecord(record)}
                             >
                               Sacar de lista
@@ -824,14 +827,16 @@ export function MaintenanceTab({ initialRequest }: MaintenanceTabProps) {
                     </p>
                   </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="font-inter"
-                    onClick={() => editWorkshop(workshop)}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
+                  {canManageMaintenance && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="font-inter"
+                      onClick={() => editWorkshop(workshop)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
