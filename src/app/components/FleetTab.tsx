@@ -67,6 +67,23 @@ const emptyForm: AmbulanceForm = {
   pautaPreventivaKm: 10000,
 }
 
+const formatIntegerInput = (value: number | string) => {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : Number(String(value).replace(/\./g, "").replace(/[^\d]/g, ""))
+
+  if (Number.isNaN(numericValue)) return ""
+
+  return numericValue.toLocaleString("es-CL")
+}
+
+const parseIntegerInput = (value: string) => {
+  const parsed = Number(value.replace(/\./g, "").replace(/[^\d]/g, ""))
+
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
 export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
   const {
     ambulances,
@@ -1111,12 +1128,13 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                   Kilometraje total actual
                 </label>
                 <Input
-                  type="number"
-                  value={editingForm.kilometrajeActual}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(editingForm.kilometrajeActual)}
                   onChange={(event) =>
                     setEditingForm({
                       ...editingForm,
-                      kilometrajeActual: Number(event.target.value),
+                      kilometrajeActual: parseIntegerInput(event.target.value),
                     })
                   }
                 />
@@ -1127,12 +1145,13 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                   Uso desde última mantención
                 </label>
                 <Input
-                  type="number"
-                  value={editingForm.usoDesdeUltimaMantencion}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(editingForm.usoDesdeUltimaMantencion)}
                   onChange={(event) =>
                     setEditingForm({
                       ...editingForm,
-                      usoDesdeUltimaMantencion: Number(event.target.value),
+                      usoDesdeUltimaMantencion: parseIntegerInput(event.target.value),
                     })
                   }
                 />
@@ -1143,12 +1162,13 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                   Pauta preventiva de mantención
                 </label>
                 <Input
-                  type="number"
-                  value={editingForm.pautaPreventivaKm}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatIntegerInput(editingForm.pautaPreventivaKm)}
                   onChange={(event) =>
                     setEditingForm({
                       ...editingForm,
-                      pautaPreventivaKm: Number(event.target.value),
+                      pautaPreventivaKm: parseIntegerInput(event.target.value),
                     })
                   }
                 />
@@ -1288,17 +1308,17 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
 
               <div>
                 <h2 className="text-xl font-inter font-bold text-red-900">
-                  Confirmar eliminación permanente
+                  Archivar ambulancia
                 </h2>
                 <p className="text-sm font-inter text-red-700 mt-1">
-                  Estás por eliminar la ambulancia {deleteTarget.id} ({deleteTarget.patente}).
+                  Estás por archivar la ambulancia {deleteTarget.id} ({deleteTarget.patente}).
                 </p>
               </div>
             </div>
 
             <div className="p-4 rounded-lg border border-red-200 bg-red-50 text-red-800 mb-4">
               <p className="text-sm font-inter">
-                Esta acción quitará la unidad de la base de datos. Confirma solo si corresponde eliminar esta ambulancia.
+                Esta acción la quitará de la flota activa, pero conservará sus formularios, mantenciones, kilometraje e historial asociado.
               </p>
             </div>
 
@@ -1309,7 +1329,7 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
 
               <Button className="font-inter bg-red-600 hover:bg-red-700" onClick={confirmarEliminacion}>
                 <Trash2 className="w-4 h-4 mr-2" />
-                Eliminar definitivamente
+                Archivar ambulancia
               </Button>
             </div>
           </Card>

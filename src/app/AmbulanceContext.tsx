@@ -32,9 +32,12 @@ export interface Ambulance {
   usoDesdeUltimaMantencion: number
   pautaPreventivaKm: number
   lastUpdate: string
+  isActive?: boolean
+  archivedAt?: string | null
 }
 
 interface DbAmbulance {
+  id?: string | null
   code: string
   patente: string
   base: string
@@ -45,6 +48,13 @@ interface DbAmbulance {
   uso_desde_ultima_mantencion: number | null
   pauta_preventiva_km: number
   last_update: string
+  is_active: boolean | null
+  archived_at: string | null
+}
+
+interface UpdateAmbulanceOptions {
+  mileageSource?: "ajuste_admin" | "formulario_manual" | "gps" | "mantencion"
+  mileageNotes?: string
 }
 
 interface AmbulanceContextValue {
@@ -53,7 +63,11 @@ interface AmbulanceContextValue {
   error: string
   refreshAmbulances: () => Promise<void>
   addAmbulance: (ambulance: Ambulance) => Promise<void>
-  updateAmbulance: (originalId: string, updatedAmbulance: Ambulance) => Promise<void>
+  updateAmbulance: (
+    originalId: string,
+    updatedAmbulance: Ambulance,
+    options?: UpdateAmbulanceOptions
+  ) => Promise<boolean>
   deleteAmbulance: (id: string) => Promise<void>
   getUsoDesdeMantencion: (ambulance: Ambulance) => number
   getKmFaltantes: (ambulance: Ambulance) => number
@@ -152,6 +166,7 @@ const sortAmbulances = (items: Ambulance[]) => {
 }
 
 const ambulanceSelect = `
+  id,
   code,
   patente,
   base,
@@ -161,7 +176,9 @@ const ambulanceSelect = `
   kilometraje_ultima_mantencion,
   uso_desde_ultima_mantencion,
   pauta_preventiva_km,
-  last_update
+  last_update,
+  is_active,
+  archived_at
 `
 
 const normalizeStatusFromDatabase = (status: AmbulanceStatus): AmbulanceStatus => {
@@ -186,6 +203,8 @@ const mapFromDatabase = (row: DbAmbulance): Ambulance => {
     usoDesdeUltimaMantencion,
     pautaPreventivaKm: row.pauta_preventiva_km,
     lastUpdate: row.last_update,
+    isActive: row.is_active ?? true,
+    archivedAt: row.archived_at,
   }
 }
 
@@ -206,6 +225,8 @@ const mapToDatabase = (ambulance: Ambulance) => ({
   uso_desde_ultima_mantencion: ambulance.usoDesdeUltimaMantencion,
   pauta_preventiva_km: ambulance.pautaPreventivaKm,
   last_update: ambulance.lastUpdate || getCurrentTime(),
+  is_active: ambulance.isActive ?? true,
+  archived_at: ambulance.archivedAt ?? null,
 })
 
 const getUsoDesdeMantencion = (ambulance: Ambulance) =>
@@ -266,6 +287,7 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("ambulances")
       .select(ambulanceSelect)
+      .eq("is_active", true)
       .order("code", { ascending: true })
 
     if (error) {
@@ -314,8 +336,10 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
 
   const updateAmbulance = async (
     originalId: string,
-    updatedAmbulance: Ambulance
+    updatedAmbulance: Ambulance,
+    options?: UpdateAmbulanceOptions
   ) => {
+    const previousAmbulance = ambulances.find((item) => item.id === originalId)
     const ambulanceWithUpdate = {
       ...updatedAmbulance,
       id: updatedAmbulance.id.trim().toUpperCase(),
@@ -332,10 +356,39 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       window.alert(`No se pudo actualizar la ambulancia: ${error.message}`)
-      return
+      return false
     }
 
     const savedAmbulance = mapFromDatabase(data)
+    const mileageChanged =
+      previousAmbulance &&
+      previousAmbulance.kilometrajeActual !== savedAmbulance.kilometrajeActual
+
+    if (mileageChanged && previousAmbulance) {
+      const { error: mileageError } = await supabase.from("mileage_logs").insert({
+        ambulance_id: data.id || null,
+        ambulance_code: savedAmbulance.id,
+        previous_mileage: previousAmbulance.kilometrajeActual,
+        new_mileage: savedAmbulance.kilometrajeActual,
+        travelled_km: Math.max(
+          0,
+          savedAmbulance.kilometrajeActual - previousAmbulance.kilometrajeActual
+        ),
+        source_type: options?.mileageSource || "ajuste_admin",
+        registered_by_name: null,
+        notes: options?.mileageNotes || "Actualizacion de kilometraje desde la app",
+        kilometraje_total: savedAmbulance.kilometrajeActual,
+        uso_desde_mantencion: savedAmbulance.usoDesdeUltimaMantencion,
+        km_faltantes: getKmFaltantes(savedAmbulance),
+      })
+
+      if (mileageError) {
+        console.warn(
+          "No se pudo registrar el historial de kilometraje:",
+          mileageError.message
+        )
+      }
+    }
 
     setAmbulances((prev) =>
       sortAmbulances([
@@ -345,28 +398,23 @@ export function AmbulanceProvider({ children }: { children: ReactNode }) {
         savedAmbulance,
       ])
     )
+
+    return true
   }
 
   const deleteAmbulance = async (id: string) => {
-    const relatedDeletes = [
-      supabase.from("maintenance_records").delete().eq("ambulance_code", id),
-      supabase.from("ambulance_locations").delete().eq("ambulance_code", id),
-      supabase.from("shift_route_forms").delete().eq("ambulance_code", id),
-    ]
-
-    for (const deleteRequest of relatedDeletes) {
-      const { error } = await deleteRequest
-
-      if (error && error.code !== "42P01" && error.code !== "PGRST205") {
-        window.alert(`No se pudo eliminar información asociada: ${error.message}`)
-        return
-      }
-    }
-
-    const { error } = await supabase.from("ambulances").delete().eq("code", id)
+    const { error } = await supabase
+      .from("ambulances")
+      .update({
+        is_active: false,
+        archived_at: new Date().toISOString(),
+        status: "fuera_servicio",
+        last_update: getCurrentTime(),
+      })
+      .eq("code", id)
 
     if (error) {
-      window.alert(`No se pudo eliminar la ambulancia: ${error.message}`)
+      window.alert(`No se pudo archivar la ambulancia: ${error.message}`)
       return
     }
 

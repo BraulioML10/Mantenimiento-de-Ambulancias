@@ -253,7 +253,7 @@ const buildDocumentAnswers = () => {
 
 export function QRFormsTab() {
   const { currentUser } = useAuth()
-  const { ambulances, formatKm, getEstadoCalculado, statusConfig } =
+  const { ambulances, formatKm, getEstadoCalculado, statusConfig, updateAmbulance } =
     useAmbulances()
 
   const [savedForms, setSavedForms] = useState<SavedRouteForm[]>([])
@@ -455,6 +455,10 @@ export function QRFormsTab() {
       return "El kilometraje de llegada no puede ser menor que el kilometraje de salida."
     }
 
+    if (Number(form.endKm) < selectedAmbulance.kilometrajeActual) {
+      return "El kilometraje de llegada no puede ser menor que el kilometraje actual registrado en la ambulancia."
+    }
+
     const unansweredInspection = inspectionItems.find(
       (item) => !inspectionAnswers[item.item]?.status
     )
@@ -586,10 +590,30 @@ export function QRFormsTab() {
       status: "Enviado",
     })
 
+    if (error) {
+      setIsSaving(false)
+      window.alert(`No se pudo guardar el formulario: ${error.message}`)
+      return
+    }
+
+    const mileageUpdated = await updateAmbulance(
+      selectedAmbulance.id,
+      {
+        ...selectedAmbulance,
+        kilometrajeActual: Number(form.endKm),
+        usoDesdeUltimaMantencion:
+          selectedAmbulance.usoDesdeUltimaMantencion +
+          Math.max(0, Number(form.endKm) - selectedAmbulance.kilometrajeActual),
+      },
+      {
+        mileageSource: "formulario_manual",
+        mileageNotes: "Hoja de ruta sin GPS enviada por conductor",
+      }
+    )
+
     setIsSaving(false)
 
-    if (error) {
-      window.alert(`No se pudo guardar el formulario: ${error.message}`)
+    if (!mileageUpdated) {
       return
     }
 
