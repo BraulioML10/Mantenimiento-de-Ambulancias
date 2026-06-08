@@ -112,6 +112,11 @@ interface SavedRouteForm {
   created_at: string
 }
 
+interface PendingIncident {
+  ambulance: AmbulanceType
+  description: string
+}
+
 const today = new Date().toISOString().slice(0, 10)
 
 const formatIntegerInput = (value: number | string) => {
@@ -280,6 +285,24 @@ const buildDocumentAnswers = () => {
   }, {})
 }
 
+const getAnswerBadgeClass = (status?: string | null) => {
+  const normalized = (status || "").toLowerCase()
+
+  if (normalized === "malo" || normalized === "no") {
+    return "bg-red-100 text-red-700 border-red-200"
+  }
+
+  if (normalized === "no aplica") {
+    return "bg-amber-100 text-amber-700 border-amber-200"
+  }
+
+  if (normalized === "bueno" || normalized === "sí" || normalized === "si") {
+    return "bg-green-100 text-green-700 border-green-200"
+  }
+
+  return "bg-gray-100 text-gray-700 border-gray-200"
+}
+
 export function QRFormsTab() {
   const { currentUser } = useAuth()
   const { ambulances, formatKm, getEstadoCalculado, statusConfig, updateAmbulance } =
@@ -307,6 +330,7 @@ export function QRFormsTab() {
   const [incidentMobileCode, setIncidentMobileCode] = useState("")
   const [incidentDescription, setIncidentDescription] = useState("")
   const [incidentError, setIncidentError] = useState("")
+  const [pendingIncident, setPendingIncident] = useState<PendingIncident | null>(null)
   const [isSavingIncident, setIsSavingIncident] = useState(false)
 
   const isAdmin = currentUser?.role === "Administrador"
@@ -536,9 +560,10 @@ export function QRFormsTab() {
     setIncidentMobileCode("")
     setIncidentDescription("")
     setIncidentError("")
+    setPendingIncident(null)
   }
 
-  const reportIncident = async () => {
+  const prepareIncidentConfirmation = () => {
     if (!currentUser) return
 
     const code = incidentMobileCode.trim().toUpperCase()
@@ -562,6 +587,13 @@ export function QRFormsTab() {
       return
     }
 
+    setPendingIncident({ ambulance, description })
+  }
+
+  const confirmIncidentReport = async () => {
+    if (!currentUser || !pendingIncident) return
+
+    const { ambulance, description } = pendingIncident
     setIsSavingIncident(true)
 
     const { error } = await supabase.from("maintenance_records").insert({
@@ -581,6 +613,7 @@ export function QRFormsTab() {
 
     if (error) {
       setIncidentError(`No se pudo notificar el siniestro: ${error.message}`)
+      setPendingIncident(null)
       return
     }
 
@@ -828,11 +861,11 @@ export function QRFormsTab() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             {canReportIncident && (
               <Button
                 variant="destructive"
-                className="font-inter"
+                className="h-11 w-full sm:w-auto font-inter"
                 onClick={() => setIsIncidentOpen(true)}
               >
                 <AlertTriangle className="w-4 h-4 mr-2" />
@@ -841,7 +874,7 @@ export function QRFormsTab() {
             )}
 
             {canCreateForms && (
-              <Button className="font-inter" onClick={() => setIsCreating(true)}>
+              <Button className="h-11 w-full sm:w-auto font-inter" onClick={() => setIsCreating(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 Crear hoja de ruta
               </Button>
@@ -1008,11 +1041,10 @@ export function QRFormsTab() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-col sm:flex-row justify-end gap-2">
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="font-inter"
+                            className="h-10 min-w-[126px] font-inter"
                             onClick={() => openSavedForm(savedForm, "summary")}
                           >
                             <Eye className="w-4 h-4 mr-2" />
@@ -1020,8 +1052,7 @@ export function QRFormsTab() {
                           </Button>
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="font-inter"
+                            className="h-10 min-w-[170px] font-inter"
                             onClick={() => openSavedForm(savedForm, "full")}
                           >
                             Encuesta completa
@@ -1055,7 +1086,7 @@ export function QRFormsTab() {
                   </div>
                 </div>
 
-                <Button variant="outline" size="sm" onClick={resetIncidentForm}>
+                <Button variant="outline" className="h-10 w-10 p-0" onClick={resetIncidentForm}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -1086,14 +1117,81 @@ export function QRFormsTab() {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={resetIncidentForm}>
+                <div className="flex flex-col sm:flex-row justify-end gap-2">
+                  <Button className="h-11 w-full sm:w-auto" variant="outline" onClick={resetIncidentForm}>
                     Cancelar
                   </Button>
-                  <Button variant="destructive" onClick={reportIncident} disabled={isSavingIncident}>
-                    {isSavingIncident ? "Notificando..." : "Enviar alerta correctiva"}
+                  <Button
+                    className="h-11 w-full sm:w-auto"
+                    variant="destructive"
+                    onClick={prepareIncidentConfirmation}
+                    disabled={isSavingIncident}
+                  >
+                    Revisar y confirmar
                   </Button>
                 </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {pendingIncident && (
+          <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-xl p-6 bg-white border border-red-200 shadow-xl">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-700" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-inter font-bold text-red-900">
+                    Confirmar siniestro
+                  </h2>
+                  <p className="text-sm font-inter text-red-700 mt-1">
+                    Al confirmar, se creará una alerta correctiva y la ambulancia quedará marcada para revisión.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 font-inter text-sm">
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-gray-500">Ambulancia</p>
+                  <p className="font-semibold text-gray-900">
+                    {pendingIncident.ambulance.id} · {pendingIncident.ambulance.patente}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-gray-500">Base</p>
+                  <p className="font-semibold text-gray-900">
+                    {pendingIncident.ambulance.base || "Sin base registrada"}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+                  <p className="text-red-700">Descripción del siniestro</p>
+                  <p className="font-semibold text-red-950 mt-1">
+                    {pendingIncident.description}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col sm:flex-row justify-end gap-2">
+                <Button
+                  className="h-11 w-full sm:w-auto"
+                  variant="outline"
+                  onClick={() => setPendingIncident(null)}
+                  disabled={isSavingIncident}
+                >
+                  Volver a editar
+                </Button>
+                <Button
+                  className="h-11 w-full sm:w-auto"
+                  variant="destructive"
+                  onClick={confirmIncidentReport}
+                  disabled={isSavingIncident}
+                >
+                  {isSavingIncident ? "Guardando..." : "Confirmar y enviar"}
+                </Button>
               </div>
             </Card>
           </div>
@@ -1117,7 +1215,7 @@ export function QRFormsTab() {
 
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="h-10 w-10 p-0"
                   onClick={() => setSelectedSavedForm(null)}
                 >
                   <X className="w-4 h-4" />
@@ -1203,7 +1301,7 @@ export function QRFormsTab() {
                         <div key={`${item.item_name}-${index}`} className="border-b border-gray-100 pb-2 last:border-0">
                           <div className="flex items-start justify-between gap-2">
                             <p className="text-gray-700">{item.item_name}</p>
-                            <Badge className="bg-gray-100 text-gray-700 border-gray-200">
+                            <Badge className={`${getAnswerBadgeClass(item.status)} font-inter`}>
                               {item.status || "Sin estado"}
                             </Badge>
                           </div>
@@ -1226,7 +1324,7 @@ export function QRFormsTab() {
                         (selectedSavedForm.document_checks || []).map((item, index) => (
                           <div key={`${item.item_name}-${index}`} className="flex items-start justify-between gap-2 border-b border-gray-100 pb-2 last:border-0">
                             <p className="text-gray-700">{item.item_name}</p>
-                            <Badge className="bg-gray-100 text-gray-700 border-gray-200">
+                            <Badge className={`${getAnswerBadgeClass(item.status)} font-inter`}>
                               {item.status || "Sin estado"}
                             </Badge>
                           </div>
