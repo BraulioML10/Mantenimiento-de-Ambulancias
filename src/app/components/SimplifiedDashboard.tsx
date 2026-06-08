@@ -45,6 +45,8 @@ interface MaintenanceSummary {
   id: string;
   ambulance_code: string;
   maintenance_type: MaintenanceRequestType;
+  reason?: string | null;
+  source?: string | null;
   status: MaintenanceStatus;
   estimated_cost?: number | null;
   final_cost?: number | null;
@@ -66,7 +68,9 @@ interface FormSummary {
 
 interface PendingDamage {
   id: string;
+  kind: "bitacora" | "siniestro";
   formId: string;
+  maintenanceId?: string;
   damageIndex: number;
   ambulanceCode: string;
   patent: string;
@@ -181,7 +185,7 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
           .limit(40),
         supabase
           .from("maintenance_records")
-          .select("id, ambulance_code, maintenance_type, status, estimated_cost, final_cost, created_at, finished_at, archived_at")
+          .select("id, ambulance_code, maintenance_type, reason, source, status, estimated_cost, final_cost, created_at, finished_at, archived_at")
           .order("created_at", { ascending: false })
           .limit(80)
       ]);
@@ -246,13 +250,14 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
   }, [maintenances]);
 
   const pendingDamages = useMemo(() => {
-    return forms.flatMap((form) => {
+    const formDamages = forms.flatMap((form) => {
       return normalizeDamageReports(form.damage_reports)
         .map((damage, index): PendingDamage => {
           const status = getDamageStatus(damage);
           const date = form.form_date ?? form.created_at ?? "";
           return {
             id: `${form.id}-${index}`,
+            kind: "bitacora",
             formId: form.id,
             damageIndex: index,
             ambulanceCode: normalizeText(form.ambulance_code, "Sin móvil"),
@@ -268,7 +273,38 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
         })
         .filter((damage) => damage.status.toLowerCase() === "pendiente");
     });
-  }, [forms]);
+
+    const incidentDamages = maintenances
+      .filter((record) => {
+        const source = (record.source || "").toLowerCase();
+        return (
+          source === "siniestro" &&
+          !record.archived_at &&
+          !["finalizada", "cancelada"].includes(record.status)
+        );
+      })
+      .map((record): PendingDamage => {
+        const ambulance = ambulances.find((item) => item.id === record.ambulance_code);
+        return {
+          id: `siniestro-${record.id}`,
+          kind: "siniestro",
+          formId: "",
+          maintenanceId: record.id,
+          damageIndex: 0,
+          ambulanceCode: record.ambulance_code,
+          patent: ambulance?.patente || "Sin patente",
+          area: "Siniestro / colisión",
+          severity: "Grave",
+          date: record.created_at ?? "",
+          driver: "Reporte de siniestro",
+          status: "Pendiente",
+          description: record.reason || "Siniestro reportado para mantenimiento correctivo.",
+          raw: record as unknown as Record<string, unknown>
+        };
+      });
+
+    return [...incidentDamages, ...formDamages];
+  }, [ambulances, forms, maintenances]);
 
   const todaysForms = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -349,6 +385,36 @@ export function SimplifiedDashboard({ onRequestMaintenance, onNavigate }: Simpli
 
   const updateDamageStatus = async (damage: PendingDamage, nextStatus: string) => {
     if (!isAdmin) return;
+    if (damage.kind === "siniestro" && damage.maintenanceId) {
+      const nextMaintenanceStatus =
+        nextStatus === "Descartado" ? "cancelada" : "en_taller";
+      const payload: Record<string, string> = {
+        status: nextMaintenanceStatus,
+        notes:
+          nextStatus === "Descartado"
+            ? "Siniestro descartado desde Inicio."
+            : "Siniestro revisado desde Inicio y enviado a taller.",
+      };
+
+      if (nextMaintenanceStatus === "en_taller") {
+        payload.started_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from("maintenance_records")
+        .update(payload)
+        .eq("id", damage.maintenanceId);
+
+      if (error) {
+        alert(`No se pudo actualizar el siniestro: ${error.message}`);
+        return;
+      }
+
+      setSelectedDamage(null);
+      await loadPanelData();
+      return;
+    }
+
     const form = forms.find((item) => item.id === damage.formId);
     if (!form) return;
 

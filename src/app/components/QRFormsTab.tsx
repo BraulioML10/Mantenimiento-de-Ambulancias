@@ -27,6 +27,9 @@ type ShiftType =
 type InspectionStatus = "" | "Bueno" | "Malo" | "No aplica"
 type DocumentStatus = "" | "Sí" | "No"
 
+type HistorySortOption = "recientes" | "antiguos" | "ambulancia" | "chofer" | "mayor_km"
+type FormDetailMode = "summary" | "full"
+
 interface InspectionItem {
   category: string
   item: string
@@ -78,6 +81,32 @@ interface SavedRouteForm {
   start_km: number
   end_km: number
   total_km: number
+  form_type?: string | null
+  start_time?: string | null
+  end_time?: string | null
+  fuel_liters?: number | null
+  fuel_value?: number | null
+  fuel_km?: number | null
+  delivery_observations?: string | null
+  reception_observations?: string | null
+  inspection_items?: Array<{
+    category?: string
+    item_name?: string
+    status?: string
+    observation?: string | null
+  }>
+  document_checks?: Array<{
+    item_name?: string
+    status?: string
+    observation?: string | null
+  }>
+  damage_reports?: Array<{
+    damage_type?: string
+    affected_area?: string
+    description?: string
+    status?: string
+    estado?: string
+  }>
   destination_reason: string
   status: string
   created_at: string
@@ -270,9 +299,60 @@ export function QRFormsTab() {
   const [inspectionAnswers, setInspectionAnswers] = useState(buildInspectionAnswers)
   const [documentAnswers, setDocumentAnswers] = useState(buildDocumentAnswers)
   const [selectedSavedForm, setSelectedSavedForm] = useState<SavedRouteForm | null>(null)
+  const [formDetailMode, setFormDetailMode] = useState<FormDetailMode>("summary")
+  const [historyAmbulanceFilter, setHistoryAmbulanceFilter] = useState("todos")
+  const [historySort, setHistorySort] = useState<HistorySortOption>("recientes")
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false)
+  const [isIncidentOpen, setIsIncidentOpen] = useState(false)
+  const [incidentMobileCode, setIncidentMobileCode] = useState("")
+  const [incidentDescription, setIncidentDescription] = useState("")
+  const [incidentError, setIncidentError] = useState("")
+  const [isSavingIncident, setIsSavingIncident] = useState(false)
 
-  const totalKm = Math.max(0, Number(form.endKm) - Number(form.startKm))
+  const isAdmin = currentUser?.role === "Administrador"
+  const isCoordinator = currentUser?.role === "Coordinador"
+  const canCreateForms = currentUser?.role === "Chofer" || isAdmin
+  const canViewHistory = isAdmin
+  const canReportIncident = currentUser?.role === "Chofer" || isAdmin
+  const selectedAmbulanceHasGps = Boolean(selectedAmbulance?.hasGps)
+  const totalKm = selectedAmbulanceHasGps
+    ? 0
+    : Math.max(0, Number(form.endKm) - Number(form.startKm))
+
+  const filteredSavedForms = useMemo(() => {
+    const filtered = savedForms.filter(
+      (savedForm) =>
+        historyAmbulanceFilter === "todos" ||
+        savedForm.ambulance_code === historyAmbulanceFilter
+    )
+
+    return [...filtered].sort((a, b) => {
+      if (historySort === "antiguos") {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      }
+
+      if (historySort === "ambulancia") {
+        return a.ambulance_code.localeCompare(b.ambulance_code, "es-CL", {
+          numeric: true,
+        })
+      }
+
+      if (historySort === "chofer") {
+        return a.registered_by_name.localeCompare(b.registered_by_name, "es-CL")
+      }
+
+      if (historySort === "mayor_km") {
+        return Number(b.total_km || 0) - Number(a.total_km || 0)
+      }
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [historyAmbulanceFilter, historySort, savedForms])
+
+  const openSavedForm = (savedForm: SavedRouteForm, mode: FormDetailMode) => {
+    setSelectedSavedForm(savedForm)
+    setFormDetailMode(mode)
+  }
 
   const groupedInspectionItems = useMemo(() => {
     return inspectionItems.reduce<Record<string, InspectionItem[]>>((acc, item) => {
@@ -283,6 +363,12 @@ export function QRFormsTab() {
   }, [])
 
   const loadSavedForms = async () => {
+    if (!canViewHistory) {
+      setSavedForms([])
+      setIsLoadingHistory(false)
+      return
+    }
+
     setIsLoadingHistory(true)
 
     const { data, error } = await supabase
@@ -299,6 +385,17 @@ export function QRFormsTab() {
         start_km,
         end_km,
         total_km,
+        form_type,
+        start_time,
+        end_time,
+        fuel_liters,
+        fuel_value,
+        fuel_km,
+        delivery_observations,
+        reception_observations,
+        inspection_items,
+        document_checks,
+        damage_reports,
         destination_reason,
         status,
         created_at
@@ -315,7 +412,7 @@ export function QRFormsTab() {
 
   useEffect(() => {
     loadSavedForms()
-  }, [])
+  }, [canViewHistory])
 
   const resetCreation = () => {
     setIsCreating(false)
@@ -434,6 +531,68 @@ export function QRFormsTab() {
     }))
   }
 
+  const resetIncidentForm = () => {
+    setIsIncidentOpen(false)
+    setIncidentMobileCode("")
+    setIncidentDescription("")
+    setIncidentError("")
+  }
+
+  const reportIncident = async () => {
+    if (!currentUser) return
+
+    const code = incidentMobileCode.trim().toUpperCase()
+    const description = incidentDescription.trim()
+    setIncidentError("")
+
+    if (!code) {
+      setIncidentError("Debes ingresar el código del móvil involucrado.")
+      return
+    }
+
+    if (!description) {
+      setIncidentError("Debes describir brevemente el siniestro o colisión.")
+      return
+    }
+
+    const ambulance = ambulances.find((item) => item.id.toUpperCase() === code)
+
+    if (!ambulance) {
+      setIncidentError("No existe una ambulancia registrada con ese código.")
+      return
+    }
+
+    setIsSavingIncident(true)
+
+    const { error } = await supabase.from("maintenance_records").insert({
+      ambulance_code: ambulance.id,
+      ambulance_patente: ambulance.patente,
+      requested_by_user_id: currentUser.id,
+      requested_by_name: currentUser.name,
+      requested_by_role: currentUser.role,
+      maintenance_type: "correctiva",
+      reason: `Siniestro/colisión: ${description}`,
+      source: "siniestro",
+      status: "programada",
+      notes: "Reporte grave generado desde Formularios. Debe revisarse como mantenimiento correctivo.",
+    })
+
+    setIsSavingIncident(false)
+
+    if (error) {
+      setIncidentError(`No se pudo notificar el siniestro: ${error.message}`)
+      return
+    }
+
+    await updateAmbulance(ambulance.id, {
+      ...ambulance,
+      status: "mantencion_correctiva",
+    })
+
+    window.alert("Siniestro notificado. La ambulancia quedó marcada para revisión correctiva.")
+    resetIncidentForm()
+  }
+
   const validateForm = () => {
     if (!selectedAmbulance) {
       return "Debes seleccionar y confirmar una ambulancia registrada."
@@ -447,16 +606,18 @@ export function QRFormsTab() {
       return "El campo motivo y destino es obligatorio."
     }
 
-    if (Number(form.startKm) < 0 || Number(form.endKm) < 0) {
-      return "Los kilometrajes no pueden ser negativos."
-    }
+    if (!selectedAmbulanceHasGps) {
+      if (Number(form.startKm) < 0 || Number(form.endKm) < 0) {
+        return "Los kilometrajes no pueden ser negativos."
+      }
 
-    if (Number(form.endKm) < Number(form.startKm)) {
-      return "El kilometraje de llegada no puede ser menor que el kilometraje de salida."
-    }
+      if (Number(form.endKm) < Number(form.startKm)) {
+        return "El kilometraje de llegada no puede ser menor que el kilometraje de salida."
+      }
 
-    if (Number(form.endKm) < selectedAmbulance.kilometrajeActual) {
-      return "El kilometraje de llegada no puede ser menor que el kilometraje actual registrado en la ambulancia."
+      if (Number(form.endKm) < selectedAmbulance.kilometrajeActual) {
+        return "El kilometraje de llegada no puede ser menor que el kilometraje actual registrado en la ambulancia."
+      }
     }
 
     const unansweredInspection = inspectionItems.find(
@@ -553,7 +714,15 @@ export function QRFormsTab() {
       damage_type: damage.damageType,
       affected_area: damage.affectedArea,
       description: damage.description.trim(),
+      status: "Pendiente",
     }))
+
+    const startKm = selectedAmbulanceHasGps
+      ? selectedAmbulance.kilometrajeActual
+      : Number(form.startKm)
+    const endKm = selectedAmbulanceHasGps
+      ? selectedAmbulance.kilometrajeActual
+      : Number(form.endKm)
 
     const { error } = await supabase.from("shift_route_forms").insert({
       ambulance_code: selectedAmbulance.id,
@@ -571,8 +740,10 @@ export function QRFormsTab() {
       start_time: form.startTime || null,
       end_time: form.endTime || null,
 
-      start_km: Number(form.startKm),
-      end_km: Number(form.endKm),
+      start_km: startKm,
+      end_km: endKm,
+      total_km: Math.max(0, endKm - startKm),
+      form_type: selectedAmbulanceHasGps ? "gps" : "manual_sin_gps",
 
       destination_reason: form.destinationReason.trim(),
 
@@ -596,20 +767,22 @@ export function QRFormsTab() {
       return
     }
 
-    const mileageUpdated = await updateAmbulance(
-      selectedAmbulance.id,
-      {
-        ...selectedAmbulance,
-        kilometrajeActual: Number(form.endKm),
-        usoDesdeUltimaMantencion:
-          selectedAmbulance.usoDesdeUltimaMantencion +
-          Math.max(0, Number(form.endKm) - selectedAmbulance.kilometrajeActual),
-      },
-      {
-        mileageSource: "formulario_manual",
-        mileageNotes: "Hoja de ruta sin GPS enviada por conductor",
-      }
-    )
+    const mileageUpdated = selectedAmbulanceHasGps
+      ? true
+      : await updateAmbulance(
+          selectedAmbulance.id,
+          {
+            ...selectedAmbulance,
+            kilometrajeActual: Number(form.endKm),
+            usoDesdeUltimaMantencion:
+              selectedAmbulance.usoDesdeUltimaMantencion +
+              Math.max(0, Number(form.endKm) - selectedAmbulance.kilometrajeActual),
+          },
+          {
+            mileageSource: "formulario_manual",
+            mileageNotes: "Hoja de ruta sin GPS enviada por conductor",
+          }
+        )
 
     setIsSaving(false)
 
@@ -655,18 +828,99 @@ export function QRFormsTab() {
             </p>
           </div>
 
-          <Button className="font-inter" onClick={() => setIsCreating(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Crear hoja de ruta
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {canReportIncident && (
+              <Button
+                variant="destructive"
+                className="font-inter"
+                onClick={() => setIsIncidentOpen(true)}
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                Notificar siniestro
+              </Button>
+            )}
+
+            {canCreateForms && (
+              <Button className="font-inter" onClick={() => setIsCreating(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Crear hoja de ruta
+              </Button>
+            )}
+          </div>
         </div>
 
+        {!canViewHistory && (
+          <Card className="p-5 border border-gray-200 bg-gray-50">
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-gray-600 mt-0.5" />
+              <div>
+                <h2 className="text-base font-inter font-bold text-gray-900">
+                  Historial no disponible para este perfil
+                </h2>
+                <p className="text-sm font-inter text-gray-600 mt-1">
+                  El historial de bitácoras solo es visible para administradores.
+                  {currentUser?.role === "Chofer"
+                    ? " Puedes crear formularios de turno y notificar siniestros."
+                    : " Puedes usar las pestañas autorizadas en modo visualización."}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {canViewHistory && (
         <Card className="p-5 border border-gray-200">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="w-5 h-5 text-gray-700" />
             <h2 className="text-lg font-inter font-bold text-gray-900">
               Historial de formularios
             </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 font-inter">
+            <div>
+              <label className="text-xs text-gray-500">Ambulancia</label>
+              <select
+                value={historyAmbulanceFilter}
+                onChange={(event) => setHistoryAmbulanceFilter(event.target.value)}
+                className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+              >
+                <option value="todos">Todas las ambulancias</option>
+                {ambulances.map((ambulance) => (
+                  <option key={ambulance.id} value={ambulance.id}>
+                    {ambulance.id} · {ambulance.patente}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500">Orden</label>
+              <select
+                value={historySort}
+                onChange={(event) => setHistorySort(event.target.value as HistorySortOption)}
+                className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+              >
+                <option value="recientes">Últimos ingresados</option>
+                <option value="antiguos">Más antiguos primero</option>
+                <option value="ambulancia">Por ambulancia</option>
+                <option value="chofer">Por chofer</option>
+                <option value="mayor_km">Mayor KM recorrido</option>
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                className="w-full font-inter"
+                onClick={() => {
+                  setHistoryAmbulanceFilter("todos")
+                  setHistorySort("recientes")
+                }}
+              >
+                Limpiar filtros
+              </Button>
+            </div>
           </div>
 
           {isLoadingHistory ? (
@@ -695,6 +949,9 @@ export function QRFormsTab() {
                       Turno
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700">
+                      Tipo
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700">
                       Registrado por
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700">
@@ -710,7 +967,14 @@ export function QRFormsTab() {
                 </thead>
 
                 <tbody>
-                  {savedForms.map((savedForm) => (
+                  {filteredSavedForms.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                        No hay bitácoras para los filtros seleccionados.
+                      </td>
+                    </tr>
+                  )}
+                  {filteredSavedForms.map((savedForm) => (
                     <tr
                       key={savedForm.id}
                       className="border-b border-gray-100 hover:bg-gray-50"
@@ -727,6 +991,11 @@ export function QRFormsTab() {
                       <td className="px-4 py-3 text-gray-700">
                         {savedForm.shift_type}
                       </td>
+                      <td className="px-4 py-3">
+                        <Badge className={`${savedForm.form_type === "gps" ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-700 border-gray-200"} font-inter`}>
+                          {savedForm.form_type === "gps" ? "GPS" : "Sin GPS"}
+                        </Badge>
+                      </td>
                       <td className="px-4 py-3 text-gray-700">
                         {savedForm.registered_by_name}
                       </td>
@@ -739,15 +1008,25 @@ export function QRFormsTab() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="font-inter"
-                          onClick={() => setSelectedSavedForm(savedForm)}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Ver
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-inter"
+                            onClick={() => openSavedForm(savedForm, "summary")}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            Resumen
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-inter"
+                            onClick={() => openSavedForm(savedForm, "full")}
+                          >
+                            Encuesta completa
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -756,14 +1035,79 @@ export function QRFormsTab() {
             </div>
           )}
         </Card>
+        )}
+
+        {isIncidentOpen && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+            <Card className="w-full max-w-xl p-6 bg-white border border-red-200 shadow-xl">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-6 h-6 text-red-700" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-inter font-bold text-red-900">
+                      Notificar siniestro o colisión
+                    </h2>
+                    <p className="text-sm font-inter text-red-700 mt-1">
+                      Este reporte no queda como daño normal de bitácora; crea una alerta correctiva para mantenimiento.
+                    </p>
+                  </div>
+                </div>
+
+                <Button variant="outline" size="sm" onClick={resetIncidentForm}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4 font-inter">
+                <div>
+                  <label className="text-sm text-gray-600">Código de ambulancia</label>
+                  <Input
+                    value={incidentMobileCode}
+                    onChange={(event) => setIncidentMobileCode(event.target.value.toUpperCase())}
+                    placeholder="Ej: R-12"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-gray-600">Descripción breve del siniestro</label>
+                  <textarea
+                    value={incidentDescription}
+                    onChange={(event) => setIncidentDescription(event.target.value)}
+                    placeholder="Describe la colisión, zona afectada o situación grave..."
+                    className="w-full min-h-28 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                  />
+                </div>
+
+                {incidentError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {incidentError}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={resetIncidentForm}>
+                    Cancelar
+                  </Button>
+                  <Button variant="destructive" onClick={reportIncident} disabled={isSavingIncident}>
+                    {isSavingIncident ? "Notificando..." : "Enviar alerta correctiva"}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {selectedSavedForm && (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-            <Card className="w-full max-w-2xl p-6 bg-white border border-gray-200 shadow-xl">
+            <Card className="w-full max-w-5xl max-h-[90vh] overflow-y-auto p-6 bg-white border border-gray-200 shadow-xl">
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
                   <h2 className="text-xl font-inter font-bold text-gray-900">
-                    Hoja de ruta registrada
+                    {formDetailMode === "summary"
+                      ? "Resumen de bitácora"
+                      : "Encuesta completa de bitácora"}
                   </h2>
                   <p className="text-sm font-inter text-gray-600">
                     {selectedSavedForm.ambulance_code} ·{" "}
@@ -796,6 +1140,13 @@ export function QRFormsTab() {
                 </div>
 
                 <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-gray-500">Tipo formulario</p>
+                  <p className="font-semibold text-gray-900">
+                    {selectedSavedForm.form_type === "gps" ? "Con GPS" : "Sin GPS"}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 p-3">
                   <p className="text-gray-500">Registrado por</p>
                   <p className="font-semibold text-gray-900">
                     {selectedSavedForm.registered_by_name}
@@ -823,6 +1174,15 @@ export function QRFormsTab() {
                   </p>
                 </div>
 
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-gray-500">KM recorrido</p>
+                  <p className="font-semibold text-gray-900">
+                    {selectedSavedForm.form_type === "gps"
+                      ? "Controlado por GPS"
+                      : formatKm(selectedSavedForm.total_km)}
+                  </p>
+                </div>
+
                 <div className="rounded-lg border border-gray-200 p-3 md:col-span-2">
                   <p className="text-gray-500">Motivo y destino</p>
                   <p className="font-semibold text-gray-900">
@@ -830,6 +1190,71 @@ export function QRFormsTab() {
                   </p>
                 </div>
               </div>
+
+              {formDetailMode === "full" && (
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm font-inter">
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <h3 className="font-bold text-gray-900 mb-2">Revisión del móvil</h3>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {(selectedSavedForm.inspection_items || []).length === 0 ? (
+                      <p className="text-gray-500">Sin revisión registrada.</p>
+                    ) : (
+                      (selectedSavedForm.inspection_items || []).map((item, index) => (
+                        <div key={`${item.item_name}-${index}`} className="border-b border-gray-100 pb-2 last:border-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-gray-700">{item.item_name}</p>
+                            <Badge className="bg-gray-100 text-gray-700 border-gray-200">
+                              {item.status || "Sin estado"}
+                            </Badge>
+                          </div>
+                          {item.observation && (
+                            <p className="text-xs text-gray-500 mt-1">{item.observation}</p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-gray-200 p-3">
+                    <h3 className="font-bold text-gray-900 mb-2">Documentos y combustible</h3>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {(selectedSavedForm.document_checks || []).length === 0 ? (
+                        <p className="text-gray-500">Sin documentos registrados.</p>
+                      ) : (
+                        (selectedSavedForm.document_checks || []).map((item, index) => (
+                          <div key={`${item.item_name}-${index}`} className="flex items-start justify-between gap-2 border-b border-gray-100 pb-2 last:border-0">
+                            <p className="text-gray-700">{item.item_name}</p>
+                            <Badge className="bg-gray-100 text-gray-700 border-gray-200">
+                              {item.status || "Sin estado"}
+                            </Badge>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 p-3">
+                    <h3 className="font-bold text-gray-900 mb-2">Daños reportados</h3>
+                    <div className="space-y-2">
+                      {(selectedSavedForm.damage_reports || []).length === 0 ? (
+                        <p className="text-gray-500">Sin daños reportados.</p>
+                      ) : (
+                        (selectedSavedForm.damage_reports || []).map((damage, index) => (
+                          <div key={`${damage.affected_area}-${index}`} className="rounded-md bg-red-50 border border-red-100 p-2">
+                            <p className="font-semibold text-red-900">
+                              {damage.damage_type || "Daño"} · {damage.affected_area || "Sin zona"}
+                            </p>
+                            <p className="text-red-800 mt-1">{damage.description}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              )}
             </Card>
           </div>
         )}
@@ -1047,45 +1472,63 @@ export function QRFormsTab() {
                 {missingText(!form.destinationReason.trim())}
               </div>
 
-              <div>
-                <label className="text-sm text-gray-600">Kilometraje salida (obligatorio)</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatIntegerInput(form.startKm)}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      startKm: parseIntegerInput(event.target.value),
-                    })
-                  }
-                  className={requiredInputClass(Number(form.startKm) < 0)}
-                />
-              </div>
+              {selectedAmbulanceHasGps ? (
+                <div className="md:col-span-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Ambulance className="w-5 h-5 text-blue-700 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-inter font-bold text-blue-900">
+                        Ambulancia con GPS
+                      </h3>
+                      <p className="text-sm font-inter text-blue-700 mt-1">
+                        Este formulario no solicita kilometraje manual. El recorrido se debe revisar desde el registro GPS cuando esté disponible.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm text-gray-600">Kilometraje salida (obligatorio)</label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={formatIntegerInput(form.startKm)}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          startKm: parseIntegerInput(event.target.value),
+                        })
+                      }
+                      className={requiredInputClass(Number(form.startKm) < 0)}
+                    />
+                  </div>
 
-              <div>
-                <label className="text-sm text-gray-600">Kilometraje llegada (obligatorio)</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatIntegerInput(form.endKm)}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      endKm: parseIntegerInput(event.target.value),
-                    })
-                  }
-                  className={requiredInputClass(
-                    Number(form.endKm) < Number(form.startKm)
-                  )}
-                />
-                {missingText(Number(form.endKm) < Number(form.startKm))}
-              </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Kilometraje llegada (obligatorio)</label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={formatIntegerInput(form.endKm)}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          endKm: parseIntegerInput(event.target.value),
+                        })
+                      }
+                      className={requiredInputClass(
+                        Number(form.endKm) < Number(form.startKm)
+                      )}
+                    />
+                    {missingText(Number(form.endKm) < Number(form.startKm))}
+                  </div>
 
-              <div>
-                <label className="text-sm text-gray-600">Recorrido calculado</label>
-                <Input value={formatKm(totalKm)} disabled />
-              </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Recorrido calculado</label>
+                    <Input value={formatKm(totalKm)} disabled />
+                  </div>
+                </>
+              )}
             </div>
           </Card>
 
@@ -1124,20 +1567,22 @@ export function QRFormsTab() {
                 />
               </div>
 
-              <div>
-                <label className="text-sm text-gray-600">Kilometraje asociado a carga</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatIntegerInput(form.fuelKm)}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      fuelKm: String(parseIntegerInput(event.target.value)),
-                    })
-                  }
-                />
-              </div>
+              {!selectedAmbulanceHasGps && (
+                <div>
+                  <label className="text-sm text-gray-600">Kilometraje asociado a carga</label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatIntegerInput(form.fuelKm)}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        fuelKm: String(parseIntegerInput(event.target.value)),
+                      })
+                    }
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="text-sm text-gray-600">Nivel de combustible (obligatorio)</label>

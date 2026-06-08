@@ -40,6 +40,8 @@ interface AmbulanceForm {
   kilometrajeActual: number
   usoDesdeUltimaMantencion: number
   pautaPreventivaKm: number
+  hasGps: boolean
+  gpsDeviceId: string
 }
 
 interface PendingAmbulanceChange {
@@ -66,6 +68,8 @@ const emptyForm: AmbulanceForm = {
   kilometrajeActual: 0,
   usoDesdeUltimaMantencion: 0,
   pautaPreventivaKm: 10000,
+  hasGps: false,
+  gpsDeviceId: "",
 }
 
 const formatIntegerInput = (value: number | string) => {
@@ -251,6 +255,8 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
     kilometrajeActual: ambulance.kilometrajeActual,
     usoDesdeUltimaMantencion: getUsoDesdeMantencion(ambulance),
     pautaPreventivaKm: ambulance.pautaPreventivaKm,
+    hasGps: ambulance.hasGps ?? false,
+    gpsDeviceId: ambulance.gpsDeviceId || "",
   })
 
   const iniciarCreacion = () => {
@@ -286,6 +292,8 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
       ),
       usoDesdeUltimaMantencion,
       pautaPreventivaKm,
+      hasGps: form.hasGps,
+      gpsDeviceId: form.hasGps ? form.gpsDeviceId.trim() || null : null,
       lastUpdate: "",
     }
   }
@@ -791,6 +799,9 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                     Modelo
                   </th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">
+                    GPS
+                  </th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-700">
                     Estado operativo
                   </th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">
@@ -834,6 +845,12 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
 
                       <td className="px-4 py-3 text-gray-700">
                         {ambulance.modelo}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <Badge className={`${ambulance.hasGps ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-700 border-gray-200"} font-inter`}>
+                          {ambulance.hasGps ? "Con GPS" : "Sin GPS"}
+                        </Badge>
                       </td>
 
                       <td className="px-4 py-3">
@@ -882,16 +899,18 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                             </Button>
                           )}
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="font-inter"
-                            onClick={() =>
-                              onRequestMaintenance?.(ambulance.id, "preventiva")
-                            }
-                          >
-                            <Wrench className="w-4 h-4" />
-                          </Button>
+                          {canManageFleet && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="font-inter"
+                              onClick={() =>
+                                onRequestMaintenance?.(ambulance.id, "preventiva")
+                              }
+                            >
+                              <Wrench className="w-4 h-4" />
+                            </Button>
+                          )}
 
                           {canManageFleet && (
                             <Button
@@ -988,6 +1007,18 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                 <p className="text-lg font-inter font-bold text-gray-900">
                   {selectedAmbulance.modelo}
                 </p>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 p-4">
+                <p className="text-xs font-inter text-gray-500">GPS</p>
+                <p className="text-lg font-inter font-bold text-gray-900">
+                  {selectedAmbulance.hasGps ? "Sí" : "No"}
+                </p>
+                {selectedAmbulance.hasGps && selectedAmbulance.gpsDeviceId && (
+                  <p className="text-xs font-inter text-gray-500 mt-1">
+                    ID: {selectedAmbulance.gpsDeviceId}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border border-gray-200 p-4">
@@ -1133,6 +1164,37 @@ export function FleetTab({ onRequestMaintenance }: FleetTabProps) {
                   }
                 />
               </div>
+
+              <div>
+                <label className="text-sm text-gray-600">GPS</label>
+                <select
+                  value={editingForm.hasGps ? "si" : "no"}
+                  onChange={(event) =>
+                    setEditingForm({
+                      ...editingForm,
+                      hasGps: event.target.value === "si",
+                      gpsDeviceId: event.target.value === "si" ? editingForm.gpsDeviceId : "",
+                    })
+                  }
+                  className="w-full h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+                >
+                  <option value="no">Sin GPS</option>
+                  <option value="si">Con GPS</option>
+                </select>
+              </div>
+
+              {editingForm.hasGps && (
+                <div>
+                  <label className="text-sm text-gray-600">ID GPS</label>
+                  <Input
+                    value={editingForm.gpsDeviceId}
+                    onChange={(event) =>
+                      setEditingForm({ ...editingForm, gpsDeviceId: event.target.value })
+                    }
+                    placeholder="Identificador del dispositivo"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="text-sm text-gray-600">

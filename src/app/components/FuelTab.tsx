@@ -21,6 +21,7 @@ import {
   type PreventiveAlertStatus,
 } from "../AmbulanceContext"
 import { supabase } from "../../lib/supabaseClient"
+import { useAuth } from "../AuthContext"
 
 type SortOption =
   | "codigo"
@@ -37,6 +38,8 @@ interface FuelTabProps {
 }
 
 export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
+  const { currentUser } = useAuth()
+  const canManageKilometraje = currentUser?.role === "Administrador"
   const {
     ambulances,
     isLoading,
@@ -445,10 +448,12 @@ export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
           </p>
         </div>
 
-        <Button variant="outline" className="font-inter" onClick={exportToCsv}>
-          <Download className="w-4 h-4 mr-2" />
-          Exportar CSV
-        </Button>
+        {canManageKilometraje && (
+          <Button variant="outline" className="font-inter" onClick={exportToCsv}>
+            <Download className="w-4 h-4 mr-2" />
+            Exportar CSV
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -729,6 +734,7 @@ export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
                         Ver
                       </Button>
 
+                      {canManageKilometraje && (
                       <Button
                         size="sm"
                         className="font-inter"
@@ -747,6 +753,7 @@ export function FuelTab({ onRequestMaintenance }: FuelTabProps) {
                           ? "Mantención programada"
                           : "MP"}
                       </Button>
+                      )}
                     </div>
                   </div>
                 </Card>

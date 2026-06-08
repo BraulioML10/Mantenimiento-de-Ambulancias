@@ -32,6 +32,8 @@ export interface Ambulance {
   usoDesdeUltimaMantencion: number
   pautaPreventivaKm: number
   lastUpdate: string
+  hasGps?: boolean
+  gpsDeviceId?: string | null
   isActive?: boolean
   archivedAt?: string | null
 }
@@ -48,6 +50,8 @@ interface DbAmbulance {
   uso_desde_ultima_mantencion: number | null
   pauta_preventiva_km: number
   last_update: string
+  has_gps: boolean | null
+  gps_device_id: string | null
   is_active: boolean | null
   archived_at: string | null
 }
@@ -177,6 +181,8 @@ const ambulanceSelect = `
   uso_desde_ultima_mantencion,
   pauta_preventiva_km,
   last_update,
+  has_gps,
+  gps_device_id,
   is_active,
   archived_at
 `
@@ -203,6 +209,8 @@ const mapFromDatabase = (row: DbAmbulance): Ambulance => {
     usoDesdeUltimaMantencion,
     pautaPreventivaKm: row.pauta_preventiva_km,
     lastUpdate: row.last_update,
+    hasGps: row.has_gps ?? false,
+    gpsDeviceId: row.gps_device_id,
     isActive: row.is_active ?? true,
     archivedAt: row.archived_at,
   }
@@ -225,6 +233,8 @@ const mapToDatabase = (ambulance: Ambulance) => ({
   uso_desde_ultima_mantencion: ambulance.usoDesdeUltimaMantencion,
   pauta_preventiva_km: ambulance.pautaPreventivaKm,
   last_update: ambulance.lastUpdate || getCurrentTime(),
+  has_gps: ambulance.hasGps ?? false,
+  gps_device_id: ambulance.hasGps ? ambulance.gpsDeviceId || null : null,
   is_active: ambulance.isActive ?? true,
   archived_at: ambulance.archivedAt ?? null,
 })

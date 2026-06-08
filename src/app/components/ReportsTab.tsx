@@ -38,6 +38,8 @@ import { useAuth } from "../AuthContext"
 type StatsSection = "kilometraje" | "presupuesto" | "mantenimientos" | "talleres" | "ambulancia"
 type RangeMode = "last6" | "last12" | "last36"
 type SplitMode = "cantidad" | "gasto"
+type BudgetMovementAction = "abono" | "reduccion"
+type BudgetCategory = "preventiva" | "correctiva"
 
 interface RouteFormStatsRow {
   id: string
@@ -480,8 +482,18 @@ export function ReportsTab() {
   const [preventiveBudgetInput, setPreventiveBudgetInput] = useState(0)
   const [correctiveBudgetInput, setCorrectiveBudgetInput] = useState(0)
   const [budgetNotes, setBudgetNotes] = useState("")
+  const [annualBudgetYear, setAnnualBudgetYear] = useState(currentYear)
+  const [annualPreventiveBudgetInput, setAnnualPreventiveBudgetInput] = useState(0)
+  const [annualCorrectiveBudgetInput, setAnnualCorrectiveBudgetInput] = useState(0)
+  const [budgetMovementAction, setBudgetMovementAction] =
+    useState<BudgetMovementAction>("abono")
+  const [budgetMovementCategory, setBudgetMovementCategory] =
+    useState<BudgetCategory>("preventiva")
+  const [budgetMovementAmount, setBudgetMovementAmount] = useState(0)
+  const [budgetMovementReason, setBudgetMovementReason] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingBudget, setIsSavingBudget] = useState(false)
+  const [isSavingBudgetAction, setIsSavingBudgetAction] = useState(false)
   const [notice, setNotice] = useState("")
 
   const selectedBudget = useMemo(
@@ -993,6 +1005,183 @@ export function ReportsTab() {
     await loadStats()
   }
 
+  const saveAnnualBudget = async () => {
+    if (!isAdmin || !currentUser) return
+
+    if (annualPreventiveBudgetInput < 0 || annualCorrectiveBudgetInput < 0) {
+      window.alert("El presupuesto anual no puede tener montos negativos.")
+      return
+    }
+
+    const annualTotal = annualPreventiveBudgetInput + annualCorrectiveBudgetInput
+    if (
+      annualTotal >= VERY_HIGH_AMOUNT &&
+      !window.confirm("El presupuesto anual parece demasiado alto. Confirma solo si corresponde.")
+    ) {
+      return
+    }
+
+    setIsSavingBudgetAction(true)
+
+    for (let month = 1; month <= 12; month += 1) {
+      const existing = budgets.find(
+        (budget) =>
+          (budget.is_active ?? true) &&
+          getBudgetYear(budget) === annualBudgetYear &&
+          getBudgetMonth(budget) === month
+      )
+      const preventiveMonth =
+        month === 12
+          ? annualPreventiveBudgetInput - Math.round(annualPreventiveBudgetInput / 12) * 11
+          : Math.round(annualPreventiveBudgetInput / 12)
+      const correctiveMonth =
+        month === 12
+          ? annualCorrectiveBudgetInput - Math.round(annualCorrectiveBudgetInput / 12) * 11
+          : Math.round(annualCorrectiveBudgetInput / 12)
+      const totalMonth = preventiveMonth + correctiveMonth
+      const payload = {
+        budget_year: annualBudgetYear,
+        budget_month: month,
+        budget_type: "mensual",
+        total_amount: totalMonth,
+        spent_amount: 0,
+        year: annualBudgetYear,
+        month,
+        initial_budget: totalMonth,
+        preventive_budget: preventiveMonth,
+        corrective_budget: correctiveMonth,
+        total_budget: totalMonth,
+        notes: "Definido desde presupuesto anual.",
+        is_active: true,
+        created_by_name: currentUser.name,
+        updated_at: new Date().toISOString(),
+      }
+
+      const response = existing
+        ? await supabase.from("maintenance_budgets").update(payload).eq("id", existing.id)
+        : await supabase
+            .from("maintenance_budgets")
+            .insert({ ...payload, created_at: new Date().toISOString() })
+
+      if (response.error) {
+        setIsSavingBudgetAction(false)
+        window.alert(`No se pudo definir el presupuesto anual: ${response.error.message}`)
+        return
+      }
+    }
+
+    await supabase.from("budget_movements").insert({
+      year: annualBudgetYear,
+      month: 1,
+      movement_type: "definicion_presupuesto_anual",
+      amount: annualTotal,
+      movement_date: `${annualBudgetYear}-01-01`,
+      reason: `Presupuesto anual preventivo ${formatCurrency(
+        annualPreventiveBudgetInput
+      )} y correctivo ${formatCurrency(annualCorrectiveBudgetInput)}`,
+      status: "activo",
+      created_by_user_id: currentUser.id,
+      created_by_name: currentUser.name,
+    })
+
+    setIsSavingBudgetAction(false)
+    await loadStats()
+  }
+
+  const registerBudgetMovement = async () => {
+    if (!isAdmin || !currentUser) return
+
+    if (budgetMovementAmount <= 0) {
+      window.alert("Ingresa un monto mayor a 0.")
+      return
+    }
+
+    if (
+      budgetMovementAmount >= VERY_HIGH_AMOUNT &&
+      !window.confirm("El monto parece demasiado alto. Confirma solo si corresponde.")
+    ) {
+      return
+    }
+
+    setIsSavingBudgetAction(true)
+
+    const targetBudget = selectedBudget
+    const currentPreventive = targetBudget ? getPreventiveBudget(targetBudget) : 0
+    const currentCorrective = targetBudget ? getCorrectiveBudget(targetBudget) : 0
+    const signedAmount =
+      budgetMovementAction === "reduccion" ? -budgetMovementAmount : budgetMovementAmount
+    const nextPreventive =
+      budgetMovementCategory === "preventiva"
+        ? Math.max(0, currentPreventive + signedAmount)
+        : currentPreventive
+    const nextCorrective =
+      budgetMovementCategory === "correctiva"
+        ? Math.max(0, currentCorrective + signedAmount)
+        : currentCorrective
+    const totalBudget = nextPreventive + nextCorrective
+    const payload = {
+      budget_year: budgetYear,
+      budget_month: budgetMonth,
+      budget_type: "mensual",
+      total_amount: totalBudget,
+      spent_amount: 0,
+      year: budgetYear,
+      month: budgetMonth,
+      initial_budget: totalBudget,
+      preventive_budget: nextPreventive,
+      corrective_budget: nextCorrective,
+      total_budget: totalBudget,
+      notes: budgetNotes.trim() || null,
+      is_active: true,
+      created_by_name: currentUser.name,
+      updated_at: new Date().toISOString(),
+    }
+
+    const budgetResponse = targetBudget
+      ? await supabase.from("maintenance_budgets").update(payload).eq("id", targetBudget.id)
+      : await supabase
+          .from("maintenance_budgets")
+          .insert({ ...payload, created_at: new Date().toISOString() })
+          .select("id")
+          .single()
+
+    if (budgetResponse.error) {
+      setIsSavingBudgetAction(false)
+      window.alert(`No se pudo actualizar el presupuesto: ${budgetResponse.error.message}`)
+      return
+    }
+
+    const movementType = `${budgetMovementAction}_${budgetMovementCategory}`
+    const { error: movementError } = await supabase.from("budget_movements").insert({
+      budget_id: targetBudget?.id || (budgetResponse.data as { id?: string } | null)?.id || null,
+      year: budgetYear,
+      month: budgetMonth,
+      movement_type: movementType,
+      amount: budgetMovementAmount,
+      movement_date: `${budgetYear}-${String(budgetMonth).padStart(2, "0")}-01`,
+      reason:
+        budgetMovementReason.trim() ||
+        `${budgetMovementAction === "abono" ? "Abono" : "Reducción"} ${
+          budgetMovementCategory === "preventiva" ? "preventiva" : "correctiva"
+        }`,
+      status: "activo",
+      created_by_user_id: currentUser.id,
+      created_by_name: currentUser.name,
+    })
+
+    setIsSavingBudgetAction(false)
+
+    if (movementError) {
+      window.alert(`El presupuesto se actualizó, pero no se pudo registrar el movimiento: ${movementError.message}`)
+      await loadStats()
+      return
+    }
+
+    setBudgetMovementAmount(0)
+    setBudgetMovementReason("")
+    await loadStats()
+  }
+
   const exportCurrentSection = () => {
     if (activeSection === "kilometraje") {
       downloadCsv(
@@ -1032,6 +1221,14 @@ export function ReportsTab() {
   }
 
   const selectedBudgetMonthExpense = monthlyExpenseData.find((row) => row.key === monthKey(budgetYear, budgetMonth))
+  const selectedMonthMovements = budgetMovements
+    .filter(
+      (movement) =>
+        movement.year === budgetYear &&
+        movement.month === budgetMonth &&
+        (movement.status || "activo") === "activo"
+    )
+    .slice(0, 6)
 
   return (
     <div className="space-y-5">
@@ -1311,6 +1508,147 @@ export function ReportsTab() {
               </div>
             </Card>
           </div>
+
+          {isAdmin && (
+            <div className="grid gap-4 xl:grid-cols-3">
+              <Card className="border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-950">
+                  Definir presupuesto anual
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Distribuye el monto en los 12 meses del año seleccionado.
+                </p>
+                <div className="mt-4 space-y-3">
+                  <SelectField
+                    label="Año"
+                    value={annualBudgetYear}
+                    onChange={(value) => setAnnualBudgetYear(Number(value))}
+                  >
+                    {[currentYear - 1, currentYear, currentYear + 1].map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <label className="block text-xs font-medium text-slate-500">
+                    Preventivo anual
+                    <Input
+                      value={formatIntegerInput(annualPreventiveBudgetInput)}
+                      onChange={(event) =>
+                        setAnnualPreventiveBudgetInput(parseIntegerInput(event.target.value))
+                      }
+                      className="mt-1"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-500">
+                    Correctivo anual
+                    <Input
+                      value={formatIntegerInput(annualCorrectiveBudgetInput)}
+                      onChange={(event) =>
+                        setAnnualCorrectiveBudgetInput(parseIntegerInput(event.target.value))
+                      }
+                      className="mt-1"
+                    />
+                  </label>
+                  <Button
+                    onClick={saveAnnualBudget}
+                    disabled={isSavingBudgetAction}
+                    className="w-full"
+                  >
+                    Definir presupuesto anual
+                  </Button>
+                </div>
+              </Card>
+
+              <Card className="border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-950">
+                  Abonos y reducciones
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Aplica sobre el mes seleccionado arriba.
+                </p>
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <SelectField
+                      label="Acción"
+                      value={budgetMovementAction}
+                      onChange={(value) => setBudgetMovementAction(value as BudgetMovementAction)}
+                    >
+                      <option value="abono">Abono</option>
+                      <option value="reduccion">Reducción</option>
+                    </SelectField>
+                    <SelectField
+                      label="Categoría"
+                      value={budgetMovementCategory}
+                      onChange={(value) => setBudgetMovementCategory(value as BudgetCategory)}
+                    >
+                      <option value="preventiva">Preventivo</option>
+                      <option value="correctiva">Correctivo</option>
+                    </SelectField>
+                  </div>
+                  <label className="block text-xs font-medium text-slate-500">
+                    Monto
+                    <Input
+                      value={formatIntegerInput(budgetMovementAmount)}
+                      onChange={(event) =>
+                        setBudgetMovementAmount(parseIntegerInput(event.target.value))
+                      }
+                      className="mt-1"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-500">
+                    Motivo
+                    <Input
+                      value={budgetMovementReason}
+                      onChange={(event) => setBudgetMovementReason(event.target.value)}
+                      placeholder="Ej: abono extra, corrección de saldo..."
+                      className="mt-1"
+                    />
+                  </label>
+                  <Button
+                    variant="outline"
+                    onClick={registerBudgetMovement}
+                    disabled={isSavingBudgetAction}
+                    className="w-full"
+                  >
+                    Registrar movimiento
+                  </Button>
+                </div>
+              </Card>
+
+              <Card className="border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-950">
+                  Últimos movimientos del mes
+                </h3>
+                <div className="mt-4 space-y-2">
+                  {selectedMonthMovements.length === 0 ? (
+                    <p className="rounded-md bg-slate-50 p-3 text-xs text-slate-500">
+                      Sin movimientos registrados para este mes.
+                    </p>
+                  ) : (
+                    selectedMonthMovements.map((movement) => (
+                      <div
+                        key={movement.id}
+                        className="rounded-md border border-slate-100 p-3 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium text-slate-900">
+                            {(movement.movement_type || "movimiento").replace(/_/g, " ")}
+                          </span>
+                          <span className="font-semibold text-slate-900">
+                            {formatCurrency(safeAmount(movement.amount))}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {movement.reason || "Sin motivo registrado"}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+            </div>
+          )}
 
           <ChartCard title="Gasto mensual en mantenimientos">
             {monthlyExpenseData.every((row) => row.total === 0) ? (
