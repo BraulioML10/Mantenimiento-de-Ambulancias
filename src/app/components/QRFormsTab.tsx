@@ -29,6 +29,7 @@ type DocumentStatus = "" | "Sí" | "No"
 
 type HistorySortOption = "recientes" | "antiguos" | "ambulancia" | "chofer" | "mayor_km"
 type FormDetailMode = "summary" | "full"
+type RouteFormPhase = "preturn" | "postturn" | "full"
 
 interface InspectionItem {
   category: string
@@ -117,7 +118,20 @@ interface PendingIncident {
   description: string
 }
 
+interface ActivePreturnDraft {
+  userId: string
+  userName: string
+  createdAt: string
+  ambulance: AmbulanceType
+  form: RouteFormState
+  inspectionAnswers: Record<string, InspectionAnswer>
+  documentAnswers: Record<string, DocumentAnswer>
+}
+
 const today = new Date().toISOString().slice(0, 10)
+const PRETURN_STORAGE_PREFIX = "samu_active_preturn_"
+const DRIVER_COOLDOWN_STORAGE_PREFIX = "samu_last_route_form_"
+const DRIVER_FORM_COOLDOWN_MS = 60 * 60 * 1000
 
 const formatIntegerInput = (value: number | string) => {
   const numericValue =
@@ -332,12 +346,29 @@ export function QRFormsTab() {
   const [incidentError, setIncidentError] = useState("")
   const [pendingIncident, setPendingIncident] = useState<PendingIncident | null>(null)
   const [isSavingIncident, setIsSavingIncident] = useState(false)
+  const [formPhase, setFormPhase] = useState<RouteFormPhase>("full")
+  const [activePreturnDraft, setActivePreturnDraft] =
+    useState<ActivePreturnDraft | null>(null)
+  const [driverLastSubmitAt, setDriverLastSubmitAt] = useState<number | null>(null)
+  const [nowMs, setNowMs] = useState(Date.now())
 
   const isAdmin = currentUser?.role === "Administrador"
   const isCoordinator = currentUser?.role === "Coordinador"
+  const isDriver = currentUser?.role === "Chofer"
   const canCreateForms = currentUser?.role === "Chofer" || isAdmin
   const canViewHistory = isAdmin
   const canReportIncident = currentUser?.role === "Chofer" || isAdmin
+  const preturnStorageKey = currentUser
+    ? `${PRETURN_STORAGE_PREFIX}${currentUser.id}`
+    : ""
+  const driverCooldownStorageKey = currentUser
+    ? `${DRIVER_COOLDOWN_STORAGE_PREFIX}${currentUser.id}`
+    : ""
+  const driverCooldownRemainingMs =
+    isDriver && driverLastSubmitAt
+      ? Math.max(0, DRIVER_FORM_COOLDOWN_MS - (nowMs - driverLastSubmitAt))
+      : 0
+  const driverCooldownMinutes = Math.ceil(driverCooldownRemainingMs / 60000)
   const selectedAmbulanceHasGps = Boolean(selectedAmbulance?.hasGps)
   const totalKm = selectedAmbulanceHasGps
     ? 0
@@ -438,8 +469,96 @@ export function QRFormsTab() {
     loadSavedForms()
   }, [canViewHistory])
 
+  useEffect(() => {
+    if (!currentUser) {
+      setActivePreturnDraft(null)
+      setDriverLastSubmitAt(null)
+      return
+    }
+
+    try {
+      const storedDraft = localStorage.getItem(
+        `${PRETURN_STORAGE_PREFIX}${currentUser.id}`
+      )
+      setActivePreturnDraft(
+        storedDraft ? (JSON.parse(storedDraft) as ActivePreturnDraft) : null
+      )
+    } catch {
+      setActivePreturnDraft(null)
+    }
+
+    const storedLastSubmit = localStorage.getItem(
+      `${DRIVER_COOLDOWN_STORAGE_PREFIX}${currentUser.id}`
+    )
+    const parsedLastSubmit = storedLastSubmit ? Number(storedLastSubmit) : null
+
+    setDriverLastSubmitAt(
+      parsedLastSubmit && !Number.isNaN(parsedLastSubmit)
+        ? parsedLastSubmit
+        : null
+    )
+  }, [currentUser?.id])
+
+  useEffect(() => {
+    if (!isDriver || !driverLastSubmitAt) return
+
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30000)
+
+    return () => window.clearInterval(timer)
+  }, [driverLastSubmitAt, isDriver])
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "Chofer") return
+
+    const loadLastDriverSubmission = async () => {
+      const { data, error } = await supabase
+        .from("shift_route_forms")
+        .select("created_at")
+        .eq("registered_by_user_id", currentUser.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+
+      if (error || !data?.[0]?.created_at) return
+
+      const lastSubmittedAt = new Date(data[0].created_at).getTime()
+
+      if (!Number.isNaN(lastSubmittedAt)) {
+        setDriverLastSubmitAt((current) =>
+          current ? Math.max(current, lastSubmittedAt) : lastSubmittedAt
+        )
+      }
+    }
+
+    loadLastDriverSubmission()
+  }, [currentUser?.id, currentUser?.role])
+
+  const persistPreturnDraft = (draft: ActivePreturnDraft) => {
+    if (!preturnStorageKey) return
+
+    localStorage.setItem(preturnStorageKey, JSON.stringify(draft))
+    setActivePreturnDraft(draft)
+  }
+
+  const clearPreturnDraft = () => {
+    if (preturnStorageKey) {
+      localStorage.removeItem(preturnStorageKey)
+    }
+
+    setActivePreturnDraft(null)
+  }
+
+  const markDriverFormSubmitted = () => {
+    if (!driverCooldownStorageKey) return
+
+    const submittedAt = Date.now()
+    localStorage.setItem(driverCooldownStorageKey, String(submittedAt))
+    setDriverLastSubmitAt(submittedAt)
+    setNowMs(submittedAt)
+  }
+
   const resetCreation = () => {
     setIsCreating(false)
+    setFormPhase("full")
     setMobileCode("")
     setPendingAmbulance(null)
     setSelectedAmbulance(null)
@@ -448,6 +567,50 @@ export function QRFormsTab() {
     setInspectionAnswers(buildInspectionAnswers())
     setDocumentAnswers(buildDocumentAnswers())
     setHasTriedSubmit(false)
+  }
+
+  const loadDraftForPostturn = (draft: ActivePreturnDraft) => {
+    const currentAmbulance =
+      ambulances.find((ambulance) => ambulance.id === draft.ambulance.id) ||
+      draft.ambulance
+
+    setMobileCode(currentAmbulance.id)
+    setPendingAmbulance(null)
+    setSelectedAmbulance(currentAmbulance)
+    setLookupError("")
+    setForm({
+      ...draft.form,
+      endKm: draft.form.endKm || draft.form.startKm,
+    })
+    setInspectionAnswers(draft.inspectionAnswers)
+    setDocumentAnswers(draft.documentAnswers)
+    setHasTriedSubmit(false)
+    setFormPhase("postturn")
+    setIsCreating(true)
+  }
+
+  const startRouteCreation = () => {
+    if (!canCreateForms) return
+
+    if (isDriver) {
+      if (activePreturnDraft) {
+        loadDraftForPostturn(activePreturnDraft)
+        return
+      }
+
+      if (driverCooldownRemainingMs > 0) {
+        window.alert(
+          `Ya enviaste una hoja de ruta recientemente. Podrás crear otra en ${driverCooldownMinutes} minuto(s).`
+        )
+        return
+      }
+
+      setFormPhase("preturn")
+    } else {
+      setFormPhase("full")
+    }
+
+    setIsCreating(true)
   }
 
   const buscarAmbulancia = () => {
@@ -626,9 +789,23 @@ export function QRFormsTab() {
     resetIncidentForm()
   }
 
-  const validateForm = () => {
+  const validateForm = (phase: RouteFormPhase = formPhase) => {
     if (!selectedAmbulance) {
       return "Debes seleccionar y confirmar una ambulancia registrada."
+    }
+
+    if (phase === "postturn") {
+      if (!selectedAmbulanceHasGps) {
+        if (Number(form.endKm) < 0) {
+          return "El kilometraje final no puede ser negativo."
+        }
+
+        if (Number(form.endKm) < Number(form.startKm)) {
+          return "El kilometraje de llegada no puede ser menor que el kilometraje de salida."
+        }
+      }
+
+      return ""
     }
 
     if (!form.shiftType || !form.formDate) {
@@ -644,11 +821,18 @@ export function QRFormsTab() {
         return "Los kilometrajes no pueden ser negativos."
       }
 
-      if (Number(form.endKm) < Number(form.startKm)) {
+      if (phase !== "preturn" && Number(form.endKm) < Number(form.startKm)) {
         return "El kilometraje de llegada no puede ser menor que el kilometraje de salida."
       }
 
-      if (Number(form.endKm) < selectedAmbulance.kilometrajeActual) {
+      if (Number(form.startKm) < selectedAmbulance.kilometrajeActual) {
+        return "El kilometraje de salida no puede ser menor que el kilometraje actual registrado en la ambulancia."
+      }
+
+      if (
+        phase !== "preturn" &&
+        Number(form.endKm) < selectedAmbulance.kilometrajeActual
+      ) {
         return "El kilometraje de llegada no puede ser menor que el kilometraje actual registrado en la ambulancia."
       }
     }
@@ -704,12 +888,46 @@ export function QRFormsTab() {
     return ""
   }
 
+  const guardarPreturno = () => {
+    if (!currentUser || !selectedAmbulance) return
+
+    setHasTriedSubmit(true)
+
+    const validationError = validateForm("preturn")
+
+    if (validationError) {
+      window.alert(validationError)
+      return
+    }
+
+    const draft: ActivePreturnDraft = {
+      userId: currentUser.id,
+      userName: currentUser.name,
+      createdAt: new Date().toISOString(),
+      ambulance: selectedAmbulance,
+      form: {
+        ...form,
+        endKm: selectedAmbulanceHasGps ? selectedAmbulance.kilometrajeActual : form.startKm,
+        endTime: "",
+        receptionObservations: "",
+      },
+      inspectionAnswers,
+      documentAnswers,
+    }
+
+    persistPreturnDraft(draft)
+    window.alert(
+      "Pre-turno guardado. Al terminar el turno, vuelve a Formularios para completar el posturno."
+    )
+    resetCreation()
+  }
+
   const guardarFormulario = async () => {
     if (!currentUser || !selectedAmbulance) return
 
     setHasTriedSubmit(true)
 
-    const validationError = validateForm()
+    const validationError = validateForm(formPhase)
 
     if (validationError) {
       window.alert(validationError)
@@ -823,6 +1041,11 @@ export function QRFormsTab() {
       return
     }
 
+    if (isDriver) {
+      clearPreturnDraft()
+      markDriverFormSubmitted()
+    }
+
     window.alert("Formulario guardado correctamente.")
     resetCreation()
     loadSavedForms()
@@ -861,28 +1084,70 @@ export function QRFormsTab() {
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            {canReportIncident && (
+          {isDriver ? (
+            <div className="w-full sm:w-80 space-y-2">
               <Button
-                variant="destructive"
-                className="h-11 w-full sm:w-auto font-inter"
-                onClick={() => setIsIncidentOpen(true)}
+                className="h-14 w-full text-base font-inter"
+                onClick={startRouteCreation}
+                disabled={
+                  !activePreturnDraft && driverCooldownRemainingMs > 0
+                }
               >
-                <AlertTriangle className="w-4 h-4 mr-2" />
-                Notificar siniestro
+                {activePreturnDraft ? (
+                  <Save className="w-5 h-5 mr-2" />
+                ) : (
+                  <Plus className="w-5 h-5 mr-2" />
+                )}
+                {activePreturnDraft
+                  ? "Terminar formulario posturno"
+                  : driverCooldownRemainingMs > 0
+                    ? `Disponible en ${driverCooldownMinutes} min`
+                    : "Crear hoja de ruta"}
               </Button>
-            )}
 
-            {canCreateForms && (
-              <Button className="h-11 w-full sm:w-auto font-inter" onClick={() => setIsCreating(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Crear hoja de ruta
-              </Button>
-            )}
-          </div>
+              {canReportIncident && (
+                <Button
+                  variant="destructive"
+                  className="h-10 w-full font-inter"
+                  onClick={() => setIsIncidentOpen(true)}
+                >
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Notificar siniestro
+                </Button>
+              )}
+
+              <p className="text-xs font-inter text-gray-500">
+                Los siniestros quedan asociados a tu usuario. Úsalo solo para
+                colisiones o eventos graves reales.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-2">
+              {canCreateForms && (
+                <Button
+                  className="h-11 w-full sm:w-auto font-inter"
+                  onClick={startRouteCreation}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Crear hoja de ruta
+                </Button>
+              )}
+
+              {canReportIncident && (
+                <Button
+                  variant="destructive"
+                  className="h-11 w-full sm:w-auto font-inter"
+                  onClick={() => setIsIncidentOpen(true)}
+                >
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Notificar siniestro
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
-        {!canViewHistory && (
+        {!canViewHistory && !isDriver && (
           <Card className="p-5 border border-gray-200 bg-gray-50">
             <div className="flex items-start gap-3">
               <FileText className="w-5 h-5 text-gray-600 mt-0.5" />
@@ -1081,7 +1346,7 @@ export function QRFormsTab() {
                       Notificar siniestro o colisión
                     </h2>
                     <p className="text-sm font-inter text-red-700 mt-1">
-                      Este reporte no queda como daño normal de bitácora; crea una alerta correctiva para mantenimiento.
+                      Este reporte queda asociado a tu usuario y crea una alerta correctiva para mantenimiento.
                     </p>
                   </div>
                 </div>
@@ -1365,16 +1630,39 @@ export function QRFormsTab() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-inter font-bold text-gray-900">
-            Hoja de Ruta por Turno
+            {formPhase === "postturn"
+              ? "Formulario Posturno"
+              : formPhase === "preturn"
+                ? "Formulario Pre-turno"
+                : "Hoja de Ruta por Turno"}
           </h1>
           <p className="text-sm font-inter text-gray-600">
-            El formulario quedará asociado al móvil, patente y usuario que inició sesión.
+            {formPhase === "postturn"
+              ? "Cierra el turno con el kilometraje final. Recién al enviar se guardará la bitácora."
+              : "El formulario quedará asociado al móvil, patente y usuario que inició sesión."}
           </p>
         </div>
 
-        <Button variant="outline" className="font-inter" onClick={resetCreation}>
-          Cancelar
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {canReportIncident && (
+            <Button
+              variant="destructive"
+              className="h-10 w-full sm:w-auto font-inter"
+              onClick={() => setIsIncidentOpen(true)}
+            >
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Notificar siniestro
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            className="h-10 w-full sm:w-auto font-inter"
+            onClick={resetCreation}
+          >
+            Cancelar
+          </Button>
+        </div>
       </div>
 
       <Card className="p-5 border border-gray-200">
@@ -1489,6 +1777,134 @@ export function QRFormsTab() {
 
       {selectedAmbulance && currentUser && (
         <>
+          {formPhase === "postturn" ? (
+            <>
+              <Card className="p-5 border border-blue-200 bg-blue-50">
+                <div className="flex items-start gap-3">
+                  <ClipboardList className="w-5 h-5 text-blue-700 mt-0.5" />
+                  <div>
+                    <h2 className="text-lg font-inter font-bold text-blue-950">
+                      Pre-turno iniciado
+                    </h2>
+                    <p className="text-sm font-inter text-blue-800 mt-1">
+                      Ya existe una hoja de ruta activa para {selectedAmbulance.id} · {selectedAmbulance.patente}. No podrás iniciar otra hasta cerrar este posturno.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4 text-sm font-inter">
+                      <div>
+                        <p className="text-blue-700">Chofer</p>
+                        <p className="font-semibold text-blue-950">
+                          {currentUser.name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-700">Turno</p>
+                        <p className="font-semibold text-blue-950">
+                          {form.shiftType}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-700">Fecha</p>
+                        <p className="font-semibold text-blue-950">
+                          {form.formDate}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-700">Km salida</p>
+                        <p className="font-semibold text-blue-950">
+                          {selectedAmbulanceHasGps
+                            ? "Controlado por GPS"
+                            : formatKm(form.startKm)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-5 border border-gray-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Save className="w-5 h-5 text-gray-700" />
+                  <h2 className="text-lg font-inter font-bold text-gray-900">
+                    Cierre posturno
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-inter">
+                  <div>
+                    <label className="text-sm text-gray-600">Hora llegada</label>
+                    <Input
+                      type="time"
+                      value={form.endTime}
+                      onChange={(event) =>
+                        setForm({ ...form, endTime: event.target.value })
+                      }
+                    />
+                  </div>
+
+                  {selectedAmbulanceHasGps ? (
+                    <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                      <p className="text-sm font-inter font-semibold text-blue-900">
+                        Esta ambulancia tiene GPS.
+                      </p>
+                      <p className="text-sm font-inter text-blue-700 mt-1">
+                        No se solicita kilometraje manual; el recorrido quedará para control GPS.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-sm text-gray-600">
+                          Kilometraje final posturno (obligatorio)
+                        </label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          value={formatIntegerInput(form.endKm)}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              endKm: parseIntegerInput(event.target.value),
+                            })
+                          }
+                          className={requiredInputClass(
+                            Number(form.endKm) < Number(form.startKm)
+                          )}
+                        />
+                        {missingText(Number(form.endKm) < Number(form.startKm))}
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-gray-600">Recorrido calculado</label>
+                        <Input value={formatKm(totalKm)} disabled />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="md:col-span-3">
+                    <label className="text-sm text-gray-600">Observaciones de recepción</label>
+                    <Input
+                      value={form.receptionObservations}
+                      onChange={(event) =>
+                        setForm({ ...form, receptionObservations: event.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-3">
+                <Button variant="outline" className="h-11 w-full sm:w-auto font-inter" onClick={resetCreation}>
+                  Cancelar
+                </Button>
+
+                <Button className="h-11 w-full sm:w-auto font-inter" onClick={guardarFormulario} disabled={isSaving}>
+                  <Save className="w-4 h-4 mr-2" />
+                  {isSaving ? "Enviando..." : "Enviar posturno"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
           <Card className="p-5 border border-gray-200">
             <div className="flex items-center gap-2 mb-4">
               <Ambulance className="w-5 h-5 text-gray-700" />
@@ -2028,17 +2444,156 @@ export function QRFormsTab() {
             )}
           </Card>
 
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" className="font-inter" onClick={resetCreation}>
+          <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <Button variant="outline" className="h-11 w-full sm:w-auto font-inter" onClick={resetCreation}>
               Cancelar
             </Button>
 
-            <Button className="font-inter" onClick={guardarFormulario} disabled={isSaving}>
+            <Button
+              className="h-11 w-full sm:w-auto font-inter"
+              onClick={formPhase === "preturn" ? guardarPreturno : guardarFormulario}
+              disabled={isSaving}
+            >
               <Save className="w-4 h-4 mr-2" />
-              {isSaving ? "Guardando..." : "Guardar formulario"}
+              {isSaving
+                ? "Guardando..."
+                : formPhase === "preturn"
+                  ? "Guardar pre-turno"
+                  : "Guardar formulario"}
             </Button>
           </div>
+            </>
+          )}
         </>
+      )}
+
+      {isIncidentOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-xl p-6 bg-white border border-red-200 shadow-xl">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-700" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-inter font-bold text-red-900">
+                    Notificar siniestro o colisión
+                  </h2>
+                  <p className="text-sm font-inter text-red-700 mt-1">
+                    Este reporte se enviará con tus datos de usuario y crea una alerta correctiva para mantenimiento.
+                  </p>
+                </div>
+              </div>
+
+              <Button variant="outline" className="h-10 w-10 p-0" onClick={resetIncidentForm}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4 font-inter">
+              <div>
+                <label className="text-sm text-gray-600">Código de ambulancia</label>
+                <Input
+                  value={incidentMobileCode}
+                  onChange={(event) => setIncidentMobileCode(event.target.value.toUpperCase())}
+                  placeholder="Ej: R-12"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600">Descripción breve del siniestro</label>
+                <textarea
+                  value={incidentDescription}
+                  onChange={(event) => setIncidentDescription(event.target.value)}
+                  placeholder="Describe la colisión, zona afectada o situación grave..."
+                  className="w-full min-h-28 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                />
+              </div>
+
+              {incidentError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {incidentError}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button className="h-11 w-full sm:w-auto" variant="outline" onClick={resetIncidentForm}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="h-11 w-full sm:w-auto"
+                  variant="destructive"
+                  onClick={prepareIncidentConfirmation}
+                  disabled={isSavingIncident}
+                >
+                  Revisar y confirmar
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {pendingIncident && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-xl p-6 bg-white border border-red-200 shadow-xl">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-red-700" />
+              </div>
+              <div>
+                <h2 className="text-xl font-inter font-bold text-red-900">
+                  Confirmar siniestro
+                </h2>
+                <p className="text-sm font-inter text-red-700 mt-1">
+                  Al confirmar, se creará una alerta correctiva y la ambulancia quedará marcada para revisión.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 font-inter text-sm">
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-gray-500">Ambulancia</p>
+                <p className="font-semibold text-gray-900">
+                  {pendingIncident.ambulance.id} · {pendingIncident.ambulance.patente}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-gray-500">Base</p>
+                <p className="font-semibold text-gray-900">
+                  {pendingIncident.ambulance.base || "Sin base registrada"}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+                <p className="text-red-700">Descripción del siniestro</p>
+                <p className="font-semibold text-red-950 mt-1">
+                  {pendingIncident.description}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col sm:flex-row justify-end gap-2">
+              <Button
+                className="h-11 w-full sm:w-auto"
+                variant="outline"
+                onClick={() => setPendingIncident(null)}
+                disabled={isSavingIncident}
+              >
+                Volver a editar
+              </Button>
+              <Button
+                className="h-11 w-full sm:w-auto"
+                variant="destructive"
+                onClick={confirmIncidentReport}
+                disabled={isSavingIncident}
+              >
+                {isSavingIncident ? "Guardando..." : "Confirmar y enviar"}
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   )
