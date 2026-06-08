@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import * as SwitchPrimitive from " import * as SwitchPrimitive from "@radix-ui/react-switch@1.1.3";.Groups[0].Value -replace '@\d+\.\d+\.\d+', '' ";
+import * as SwitchPrimitive from "@radix-ui/react-switch";
 
 import { cn } from "./utils";
 

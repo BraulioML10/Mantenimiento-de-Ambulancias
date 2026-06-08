@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import * as ToggleGroupPrimitive from " import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group@1.1.2";.Groups[0].Value -replace '@\d+\.\d+\.\d+', '' ";
+import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group";
 import { type VariantProps } from "class-variance-authority";
 
 import { cn } from "./utils";

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import * as SliderPrimitive from " import * as SliderPrimitive from "@radix-ui/react-slider@1.2.3";.Groups[0].Value -replace '@\d+\.\d+\.\d+', '' ";
+import * as SliderPrimitive from "@radix-ui/react-slider";
 
 import { cn } from "./utils";
 
